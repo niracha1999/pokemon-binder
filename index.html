@@ -241,6 +241,21 @@
     .export-toggle:has(input:checked) { color: var(--text); }
     .export-count-badge { background: var(--accent); color: #fff; border-radius: 99px; padding: 2px 8px; font-size: 0.72rem; }
 
+    /* Auto-Select Modal */
+    .autoselect-modal { width: 95vw; max-width: 560px; }
+    .autoselect-section { margin-bottom: 18px; }
+    .autoselect-section-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .as-chip { font-size: 0.75rem; padding: 4px 11px; border-radius: 99px; border: 1px solid var(--border); cursor: pointer; background: var(--card); color: var(--text); transition: all 0.12s; user-select: none; }
+    .as-chip.active { background: linear-gradient(135deg,var(--accent),var(--accent2)); border-color: var(--accent2); color: #fff; }
+    .as-chip:hover:not(.active) { border-color: var(--accent2); color: var(--accent2); }
+    .as-chips-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .as-count { font-size: 0.82rem; color: var(--text-muted); padding: 8px 0 0; }
+    .as-count strong { color: var(--accent2); }
+    .as-progress { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; margin-top: 6px; display: none; }
+    .as-progress-fill { height: 100%; background: linear-gradient(90deg,var(--accent),var(--accent2)); border-radius: 99px; transition: width 0.15s; }
+    /* Sort controls */
+    .sort-select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; color: var(--text); font-size: 0.82rem; }
+
     /* PDF generating overlay */
     #pdf-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
     #pdf-overlay.show { display: flex; }
@@ -490,6 +505,82 @@
   </div>
 </div>
 
+<!-- Auto-Select Modal -->
+<div class="modal-overlay" id="autoselect-modal" onclick="closeAutoSelectOnBg(event)">
+  <div class="modal autoselect-modal">
+    <div class="modal-header" style="padding:14px 18px">
+      <div style="font-size:1.3rem">🎯</div>
+      <div style="flex:1">
+        <div style="font-size:1rem;font-weight:700;color:var(--accent2)">Auto Select Pokemon</div>
+        <div style="font-size:0.75rem;color:var(--text-muted)">Bulk-add Pokemon to your binder by form &amp; type</div>
+      </div>
+      <button class="btn-icon" style="font-size:1.2rem" onclick="closeAutoSelect()">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;max-height:70vh">
+
+      <!-- Form scope -->
+      <div class="autoselect-section">
+        <div class="autoselect-section-label">Forms to include</div>
+        <div class="as-chips-row" id="as-form-chips">
+          <span class="as-chip active" data-form="all"     onclick="asSetFormScope('all')">All forms</span>
+          <span class="as-chip"       data-form="base"     onclick="asSetFormScope('base')">Base only</span>
+          <span class="as-chip"       data-form="mega"     onclick="asToggleForm('mega')">Mega</span>
+          <span class="as-chip"       data-form="mega-x"   onclick="asToggleForm('mega-x')">Mega X</span>
+          <span class="as-chip"       data-form="mega-y"   onclick="asToggleForm('mega-y')">Mega Y</span>
+          <span class="as-chip"       data-form="gmax"     onclick="asToggleForm('gmax')">Gigantamax</span>
+          <span class="as-chip"       data-form="alola"    onclick="asToggleForm('alola')">Alolan</span>
+          <span class="as-chip"       data-form="galar"    onclick="asToggleForm('galar')">Galarian</span>
+          <span class="as-chip"       data-form="hisui"    onclick="asToggleForm('hisui')">Hisuian</span>
+          <span class="as-chip"       data-form="paldea"   onclick="asToggleForm('paldea')">Paldean</span>
+          <span class="as-chip"       data-form="terastal" onclick="asToggleForm('terastal')">Terastal</span>
+          <span class="as-chip"       data-form="primal"   onclick="asToggleForm('primal')">Primal</span>
+          <span class="as-chip"       data-form="origin"   onclick="asToggleForm('origin')">Origin</span>
+          <span class="as-chip"       data-form="crowned"  onclick="asToggleForm('crowned')">Crowned</span>
+          <span class="as-chip"       data-form="hero"     onclick="asToggleForm('hero')">Hero</span>
+          <span class="as-chip"       data-form="eternamax" onclick="asToggleForm('eternamax')">Eternamax</span>
+          <span class="as-chip"       data-form="totem"    onclick="asToggleForm('totem')">Totem</span>
+        </div>
+      </div>
+
+      <!-- Type filter -->
+      <div class="autoselect-section">
+        <div class="autoselect-section-label">
+          Type filter <span style="font-size:0.68rem;color:var(--text-muted)">(leave blank = all types)</span>
+          <button class="exp-chip-btn" style="margin-left:auto" onclick="asClearTypes()">Clear</button>
+        </div>
+        <div class="as-chips-row" id="as-type-chips"></div>
+      </div>
+
+      <!-- Generation filter -->
+      <div class="autoselect-section">
+        <div class="autoselect-section-label">
+          Generation <span style="font-size:0.68rem;color:var(--text-muted)">(leave blank = all gens)</span>
+          <button class="exp-chip-btn" style="margin-left:auto" onclick="asClearGens()">Clear</button>
+        </div>
+        <div class="as-chips-row" id="as-gen-chips">
+          <span class="as-chip" data-gen="1" onclick="asToggleGen(1)">Gen 1</span>
+          <span class="as-chip" data-gen="2" onclick="asToggleGen(2)">Gen 2</span>
+          <span class="as-chip" data-gen="3" onclick="asToggleGen(3)">Gen 3</span>
+          <span class="as-chip" data-gen="4" onclick="asToggleGen(4)">Gen 4</span>
+          <span class="as-chip" data-gen="5" onclick="asToggleGen(5)">Gen 5</span>
+          <span class="as-chip" data-gen="6" onclick="asToggleGen(6)">Gen 6</span>
+          <span class="as-chip" data-gen="7" onclick="asToggleGen(7)">Gen 7</span>
+          <span class="as-chip" data-gen="8" onclick="asToggleGen(8)">Gen 8</span>
+          <span class="as-chip" data-gen="9" onclick="asToggleGen(9)">Gen 9</span>
+        </div>
+      </div>
+
+      <div class="as-count" id="as-count">Matching: <strong>0</strong> Pokemon</div>
+      <div class="as-progress" id="as-progress"><div class="as-progress-fill" id="as-progress-fill" style="width:0%"></div></div>
+      <div id="as-status" style="font-size:0.75rem;color:var(--text-muted);margin-top:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAutoSelect()">Cancel</button>
+      <button class="btn-primary" id="as-add-btn" onclick="runAutoSelect()">🎯 Add All Matching</button>
+    </div>
+  </div>
+</div>
+
 <!-- PDF Generation overlay -->
 <div id="pdf-overlay">
   <div class="spinner" style="width:36px;height:36px;border-width:4px"></div>
@@ -723,15 +814,27 @@ function renderBinderView() {
       <h2>${b.name}</h2>
       <div class="progress-bar-wrap" style="max-width:200px"><div class="progress-bar" style="width:${pct}%"></div></div>
       <span class="progress-label">${done} / ${total} (${pct}%)</span>
+      <button class="btn-secondary btn-sm" onclick="openAutoSelectModal(${b.id})">🎯 Auto Select</button>
       <button class="btn-secondary btn-sm" onclick="openExportModal(${b.id})">📄 Export PDF</button>
-      <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">Delete</button>
+      <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">🗑 Delete</button>
     </div>
     <div class="group-toggle">
       <label>Group by:</label>
-      <select onchange="renderBinderView()" id="group-by">
+      <select id="group-by">
         <option value="pokemon">Pokemon</option>
         <option value="set">Set</option>
         <option value="none">None</option>
+      </select>
+      <label style="margin-left:10px">Sort by:</label>
+      <select class="sort-select" id="sort-by">
+        <option value="added">Date Added</option>
+        <option value="name-az">Name A→Z</option>
+        <option value="name-za">Name Z→A</option>
+        <option value="dex">Dex #</option>
+        <option value="type">Type</option>
+        <option value="collected-first">Collected First</option>
+        <option value="uncollected-first">Uncollected First</option>
+        <option value="set">Set Name</option>
       </select>
     </div>
     <div id="binder-cards-wrap"></div>`;
@@ -741,30 +844,52 @@ function renderBinderView() {
   renderBinderCards(b, groupBy);
 }
 
-function renderBinderCards(b, groupBy) {
+function renderBinderCards(b, groupBy, sortBy) {
   const wrap = document.getElementById('binder-cards-wrap');
   if (!wrap) return;
-  const grouped = groupCards(b.cards, groupBy);
+
+  // Sort cards before grouping
+  const sorted = sortCards([...b.cards], sortBy || 'added');
+  const grouped = groupCards(sorted, groupBy);
 
   wrap.innerHTML = Object.entries(grouped).map(([group, cards]) => `
     <div class="binder-section">
       ${group !== '_all' ? `<div class="binder-section-title">${group}</div>` : ''}
       <div class="checklist-grid">
-        ${cards.map(c => `
-          <div class="checklist-item ${c.collected ? 'collected' : ''}" onclick="toggleCollected(${b.id}, '${c.id}')">
-            <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinder(${b.id}, '${c.id}')" title="Remove from binder">✕</button>
-            ${c.imageSmall ? `<img src="${c.imageSmall}" alt="${c.cardName}" loading="lazy" />` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
+        ${cards.map(c => {
+          const safeId = c.id.replace(/'/g, "\\'");
+          return `<div class="checklist-item ${c.collected ? 'collected' : ''}" onclick="toggleCollected(${b.id}, '${safeId}')">
+            <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinder(${b.id}, '${safeId}')" title="Remove from binder">✕</button>
+            ${c.imageSmall ? `<img src="${c.imageSmall}" alt="${c.cardName || ''}" loading="lazy" />` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
             <div class="ci-pokemon">${c.pokemonName || ''}</div>
-            <div class="ci-name">${c.cardName}</div>
-            <div class="ci-set">${c.setName}</div>
+            <div class="ci-name">${c.cardName || ''}</div>
+            <div class="ci-set">${c.setName || ''}</div>
+            ${c.formLabel ? `<div style="margin-top:2px"><span class="form-badge" style="font-size:0.58rem">${c.formLabel}</span></div>` : ''}
             ${c.collected ? `<div class="collected-overlay"><span>✓</span></div>` : ''}
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </div>`).join('');
 
-  // Re-attach group-by handler
-  const sel = document.getElementById('group-by');
-  if (sel) sel.onchange = () => renderBinderCards(b, sel.value);
+  // Wire up group-by + sort-by handlers
+  const groupSel = document.getElementById('group-by');
+  const sortSel = document.getElementById('sort-by');
+  const rerender = () => renderBinderCards(b, groupSel?.value || 'pokemon', sortSel?.value || 'added');
+  if (groupSel) groupSel.onchange = rerender;
+  if (sortSel) sortSel.onchange = rerender;
+}
+
+function sortCards(cards, by) {
+  switch (by) {
+    case 'name-az': return cards.sort((a, b) => (a.pokemonName || '').localeCompare(b.pokemonName || ''));
+    case 'name-za': return cards.sort((a, b) => (b.pokemonName || '').localeCompare(a.pokemonName || ''));
+    case 'dex': return cards.sort((a, b) => (a.pokedexId || 9999) - (b.pokedexId || 9999));
+    case 'type': return cards.sort((a, b) => ((a.types || [])[0] || '').localeCompare((b.types || [])[0] || ''));
+    case 'collected-first': return cards.sort((a, b) => (b.collected ? 1 : 0) - (a.collected ? 1 : 0));
+    case 'uncollected-first': return cards.sort((a, b) => (a.collected ? 1 : 0) - (b.collected ? 1 : 0));
+    case 'set': return cards.sort((a, b) => (a.setName || '').localeCompare(b.setName || ''));
+    default: return cards; // 'added' = insertion order
+  }
 }
 
 function groupCards(cards, by) {
@@ -807,6 +932,9 @@ const FORM_LABELS = {
   'primal': 'Primal', 'origin': 'Origin', 'crowned': 'Crowned',
   'hero': 'Hero', 'eternamax': 'Eternamax', 'totem': 'Totem',
 };
+
+const ALL_TYPES = ['fire','water','grass','electric','psychic','ice','dragon','dark','fairy','fighting','poison','ground','rock','bug','ghost','steel','normal','flying'];
+const ALL_FORMS_EXPORT = ['mega','mega-x','mega-y','gmax','alola','galar','hisui','paldea','terastal','primal','origin','crowned','hero','eternamax','totem'];
 
 // Cache for full pokemon list (including forms)
 let allPokemonForms = [];
@@ -1200,9 +1328,221 @@ function addPokemonToBinder_fromModal() {
   toast(`Added ${enName} to "${b.name}"!`);
 }
 
+// ─── Auto-Select ─────────────────────────────────────────────────────────────
+let asState = {
+  binderId: null,
+  formScope: 'all',        // 'all' | 'base' | set of form keys
+  selectedForms: new Set(),
+  selectedTypes: new Set(),
+  selectedGens: new Set(),
+};
+
+function openAutoSelectModal(binderId) {
+  asState.binderId = binderId;
+  asState.formScope = 'all';
+  asState.selectedForms = new Set();
+  asState.selectedTypes = new Set();
+  asState.selectedGens = new Set();
+
+  // Render type chips
+  const typeWrap = document.getElementById('as-type-chips');
+  typeWrap.innerHTML = ALL_TYPES.map(t =>
+    `<span class="as-chip t-${t}" data-type="${t}" onclick="asToggleType('${t}')">${t}</span>`
+  ).join('');
+
+  asRefreshFormChips();
+  asUpdateCount();
+  document.getElementById('autoselect-modal').classList.add('open');
+}
+
+function closeAutoSelect() { document.getElementById('autoselect-modal').classList.remove('open'); }
+function closeAutoSelectOnBg(e) { if (e.target === document.getElementById('autoselect-modal')) closeAutoSelect(); }
+
+function asSetFormScope(scope) {
+  asState.formScope = scope;
+  asState.selectedForms = new Set();
+  asRefreshFormChips();
+  asUpdateCount();
+}
+
+function asToggleForm(form) {
+  asState.formScope = 'custom';
+  if (asState.selectedForms.has(form)) asState.selectedForms.delete(form);
+  else asState.selectedForms.add(form);
+  asRefreshFormChips();
+  asUpdateCount();
+}
+
+function asToggleType(type) {
+  if (asState.selectedTypes.has(type)) asState.selectedTypes.delete(type);
+  else asState.selectedTypes.add(type);
+  document.querySelectorAll('#as-type-chips .as-chip').forEach(el => {
+    el.classList.toggle('active', asState.selectedTypes.has(el.dataset.type));
+  });
+  asUpdateCount();
+}
+
+function asClearTypes() {
+  asState.selectedTypes = new Set();
+  document.querySelectorAll('#as-type-chips .as-chip').forEach(el => el.classList.remove('active'));
+  asUpdateCount();
+}
+
+function asToggleGen(gen) {
+  if (asState.selectedGens.has(gen)) asState.selectedGens.delete(gen);
+  else asState.selectedGens.add(gen);
+  document.querySelectorAll('#as-gen-chips .as-chip').forEach(el => {
+    el.classList.toggle('active', asState.selectedGens.has(Number(el.dataset.gen)));
+  });
+  asUpdateCount();
+}
+
+function asClearGens() {
+  asState.selectedGens = new Set();
+  document.querySelectorAll('#as-gen-chips .as-chip').forEach(el => el.classList.remove('active'));
+  asUpdateCount();
+}
+
+function asRefreshFormChips() {
+  document.querySelectorAll('#as-form-chips .as-chip').forEach(el => {
+    const f = el.dataset.form;
+    if (!f) return;
+    if (asState.formScope === 'all') el.classList.toggle('active', f === 'all');
+    else if (asState.formScope === 'base') el.classList.toggle('active', f === 'base');
+    else el.classList.toggle('active', asState.selectedForms.has(f) || false);
+  });
+}
+
+function asMatchesCriteria(poke) {
+  // poke is an entry from allPokemonForms: { id, name, enName, jpName, types, formLabel, pokedexId, generation }
+  // Form check
+  const isBase = !poke.formLabel;
+  if (asState.formScope === 'base' && !isBase) return false;
+  if (asState.formScope === 'custom') {
+    if (isBase) return false; // base not included in custom form selection
+    if (!asState.selectedForms.has(poke.formLabel?.toLowerCase().replace(/ /g,'-') || '')) {
+      // Try matching via FORM_SUFFIXES
+      const matched = [...asState.selectedForms].some(fk => {
+        const suffixes = FORM_SUFFIXES[fk] || [];
+        return suffixes.some(s => poke.name?.endsWith(s));
+      });
+      if (!matched) return false;
+    }
+  }
+  // Type check
+  if (asState.selectedTypes.size > 0) {
+    const hasType = (poke.types || []).some(t => asState.selectedTypes.has(t));
+    if (!hasType) return false;
+  }
+  // Gen check
+  if (asState.selectedGens.size > 0 && !asState.selectedGens.has(poke.generation)) return false;
+  return true;
+}
+
+function asUpdateCount() {
+  const matching = allPokemonForms.filter(asMatchesCriteria);
+  const countEl = document.getElementById('as-count');
+  if (countEl) countEl.innerHTML = `Matching: <strong>${matching.length}</strong> Pokemon`;
+}
+
+async function runAutoSelect() {
+  const b = getBinder(asState.binderId);
+  if (!b) { toast('No binder selected', 'err'); return; }
+
+  const btn = document.getElementById('as-add-btn');
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  const progWrap = document.getElementById('as-progress');
+  const progFill = document.getElementById('as-progress-fill');
+  const statusEl = document.getElementById('as-status');
+  if (progWrap) progWrap.style.display = 'block';
+
+  // If allPokemonForms not yet populated, fetch base list
+  let source = allPokemonForms;
+  if (source.length === 0) {
+    statusEl.textContent = 'Loading Pokemon data...';
+    await fetchAllPokemonForms();
+    source = allPokemonForms;
+  }
+
+  const matching = source.filter(asMatchesCriteria);
+  let added = 0;
+  const total = matching.length;
+
+  for (let i = 0; i < matching.length; i++) {
+    const poke = matching[i];
+    const uid = `poke-${poke.id}-${poke.formLabel ? poke.formLabel.replace(/ /g,'-') : 'base'}`;
+    if (!b.cards.find(c => c.id === uid)) {
+      addCardToBinder(asState.binderId, {
+        id: uid, itemType: 'pokemon',
+        pokemonName: poke.enName,
+        pokemonNameJP: poke.jpName || '',
+        pokedexId: poke.id,
+        types: poke.types || [],
+        formLabel: poke.formLabel || '',
+        artworkUrl: poke.sprite || '',
+        imageSmall: poke.sprite || '',
+        cardName: poke.formLabel ? `${poke.enName} (${poke.formLabel})` : poke.enName,
+        setName: poke.formLabel || 'Pokémon',
+        collected: false,
+      });
+      added++;
+    }
+    if (progFill) progFill.style.width = `${Math.round(((i+1)/total)*100)}%`;
+    if (statusEl) statusEl.textContent = `${i+1} / ${total}`;
+    if (i % 50 === 0) await new Promise(r => setTimeout(r, 0)); // yield
+  }
+
+  save();
+  renderSidebar();
+  renderBinderView();
+  closeAutoSelect();
+  toast(`Added ${added} Pokemon to "${b.name}"!`);
+  btn.disabled = false;
+  btn.textContent = '🎯 Add All Matching';
+}
+
+// Fetch all Pokemon forms into allPokemonForms cache
+async function fetchAllPokemonForms() {
+  if (allPokemonForms.length > 0) return;
+  try {
+    const res = await fetch('https://pokeapi.co/api/v2/pokemon?limit=2000');
+    const data = await res.json();
+    const entries = data.results || [];
+    // Build a minimal cache from species list + URL-based id
+    const GEN_RANGES = [[1,151],[152,251],[252,386],[387,493],[494,649],[650,721],[722,809],[810,905],[906,1025]];
+    function getGen(id) {
+      for (let g = 0; g < GEN_RANGES.length; g++) {
+        if (id >= GEN_RANGES[g][0] && id <= GEN_RANGES[g][1]) return g + 1;
+      }
+      return 0;
+    }
+    allPokemonForms = entries.map(e => {
+      const id = parseInt(e.url.split('/').filter(Boolean).pop());
+      const nameParts = e.name.split('-');
+      // Determine form label from name
+      let formLabel = '';
+      for (const [fk, suffixes] of Object.entries(FORM_SUFFIXES)) {
+        if (suffixes.some(s => e.name.endsWith(s))) { formLabel = FORM_LABELS[fk] || fk; break; }
+      }
+      return {
+        id, name: e.name,
+        enName: capitalize(nameParts[0]),
+        jpName: '',
+        sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`,
+        types: [],
+        formLabel,
+        generation: getGen(id),
+        pokedexId: id <= 1025 ? id : 0,
+      };
+    });
+  } catch (e) { console.error('fetchAllPokemonForms:', e); }
+}
+
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
 // ─── Export State ─────────────────────────────────────────────────────────────
-const ALL_TYPES = ['fire','water','grass','electric','psychic','ice','dragon','dark','fairy','fighting','poison','ground','rock','bug','ghost','steel','normal','flying'];
-const ALL_FORMS_EXPORT = ['mega','mega-x','mega-y','gmax','alola','galar','hisui','paldea','terastal','primal','origin','crowned','hero','eternamax','totem'];
 
 let exportState = {
   binderId: null,
