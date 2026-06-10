@@ -133,7 +133,7 @@
     .checklist-item { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all 0.15s; cursor: pointer; position: relative; }
     .checklist-item:hover { border-color: var(--accent2); }
     .checklist-item.collected { border-color: var(--success); background: rgba(76,175,80,0.08); }
-    .checklist-item img { width: 100%; border-radius: 6px; aspect-ratio: 2.5/3.5; object-fit: cover; }
+    .checklist-item img { width: 100%; border-radius: 6px; aspect-ratio: 2.5/3.5; object-fit: contain; background: var(--card); }
     .checklist-item .ci-name { font-size: 0.72rem; text-align: center; color: var(--text-muted); line-height: 1.3; }
     .checklist-item .ci-set { font-size: 0.65rem; color: var(--text-muted); }
     .checklist-item .ci-pokemon { font-size: 0.75rem; font-weight: 600; color: var(--text); }
@@ -796,11 +796,12 @@ function renderBinderView() {
     el.innerHTML = `
       <div class="binder-header">
         <h2>${b.name}</h2>
-        <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">Delete Binder</button>
+        <button class="btn-secondary btn-sm" onclick="openAutoSelectModal(${b.id})">🎯 Auto Select</button>
+        <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">🗑 Delete</button>
       </div>
       <div class="binder-empty">
         <div style="font-size:3rem">🃏</div>
-        <p>This binder is empty. Browse Pokemon and add cards to it!</p>
+        <p>This binder is empty. Use <strong>Auto Select</strong> to bulk-add Pokemon, or browse and add them individually.</p>
         <button class="btn-primary" style="margin-top:12px" onclick="switchTab('browse', document.querySelectorAll('.tab')[0])">Browse Pokemon</button>
       </div>`;
     return;
