@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pokemon Binder Checklist</title>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <style>
     :root {
       --bg: #1a1a2e;
@@ -172,15 +176,61 @@
     .group-toggle select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; color: var(--text); font-size: 0.82rem; }
 
     .binder-rename-input { background: transparent; border: none; border-bottom: 1px solid var(--accent); color: var(--accent2); font-size: 1.3rem; font-weight: 700; outline: none; width: 200px; }
+
+    /* Login screen */
+    #login-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 2000; align-items: center; justify-content: center; flex-direction: column; gap: 20px; }
+    #login-screen.show { display: flex; }
+    .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 40px 48px; text-align: center; max-width: 380px; width: 90%; }
+    .login-card .login-icon { font-size: 3.5rem; margin-bottom: 12px; }
+    .login-card h2 { font-size: 1.4rem; color: var(--accent2); margin-bottom: 6px; }
+    .login-card p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+    .btn-google { display: flex; align-items: center; gap: 12px; background: #fff; color: #333; padding: 12px 20px; border-radius: 10px; font-size: 0.95rem; font-weight: 600; width: 100%; justify-content: center; transition: all 0.15s; }
+    .btn-google:hover { background: #f0f0f0; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+    .btn-google svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+    /* User avatar in header */
+    .user-info { display: flex; align-items: center; gap: 10px; }
+    .user-avatar { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--accent); }
+    .user-name { font-size: 0.82rem; color: var(--text-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-signout { background: transparent; color: var(--text-muted); font-size: 0.75rem; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .btn-signout:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Save indicator */
+    #save-status { font-size: 0.72rem; color: var(--text-muted); transition: all 0.2s; }
+    #save-status.saving { color: var(--accent2); }
+    #save-status.saved { color: var(--success); }
   </style>
 </head>
 <body>
+<!-- Login Screen -->
+<div id="login-screen" class="show">
+  <div class="login-card">
+    <div class="login-icon">🎴</div>
+    <h2>Pokemon Binder Checklist</h2>
+    <p>Sign in to save your binders to the cloud and access them from any device.</p>
+    <button class="btn-google" onclick="signInWithGoogle()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+  </div>
+</div>
+
 <div id="app">
   <header>
     <div style="font-size:1.8rem">🎴</div>
     <h1>Pokemon <span>Binder</span> Checklist</h1>
     <div style="flex:1"></div>
-    <span id="header-status" style="font-size:0.8rem;color:var(--text-muted)"></span>
+    <span id="save-status"></span>
+    <div class="user-info" id="user-info" style="display:none">
+      <img class="user-avatar" id="user-avatar" src="" alt="avatar" />
+      <span class="user-name" id="user-name"></span>
+      <button class="btn-signout" onclick="signOut()">Sign out</button>
+    </div>
   </header>
 
   <aside>
@@ -269,8 +319,54 @@
 <div id="toast"></div>
 
 <script>
+// ─── Firebase init ────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCRvn6yEjaWsSbeUYx_5lC4QkIqgQj2te8",
+  authDomain: "pokemon-binder-checklist.firebaseapp.com",
+  projectId: "pokemon-binder-checklist",
+  storageBucket: "pokemon-binder-checklist.firebasestorage.app",
+  messagingSenderId: "340618632398",
+  appId: "1:340618632398:web:e7d424a9ee664913ee049f",
+  measurementId: "G-V62T1L8GGW"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+let currentUser = null;
+
+function signInWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(e => toast('Sign-in failed: ' + e.message, 'err'));
+}
+
+function signOut() {
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('login-screen').classList.remove('show');
+    document.getElementById('user-info').style.display = 'flex';
+    document.getElementById('user-name').textContent = user.displayName || user.email;
+    document.getElementById('user-avatar').src = user.photoURL || '';
+    document.getElementById('user-avatar').style.display = user.photoURL ? 'block' : 'none';
+    await loadFromFirestore();
+    renderSidebar();
+    loadPokemon();
+  } else {
+    currentUser = null;
+    binders = [];
+    activeBinder = null;
+    document.getElementById('login-screen').classList.add('show');
+    document.getElementById('user-info').style.display = 'none';
+  }
+});
+
 // ─── State ────────────────────────────────────────────────────────────────────
-let binders = JSON.parse(localStorage.getItem('pb_binders') || '[]');
+let binders = [];
 let activeBinder = null;
 let allPokemon = [];
 let displayedPokemon = [];
@@ -286,8 +382,41 @@ const GEN_RANGES = {
 // ─── Japanese name cache ─────────────────────────────────────────────────────
 const jpCache = {};
 
-// ─── Save / Load ─────────────────────────────────────────────────────────────
-function save() { localStorage.setItem('pb_binders', JSON.stringify(binders)); }
+// ─── Save to Firestore (auto-save) ────────────────────────────────────────────
+let saveTimer;
+function save() {
+  if (!currentUser) return;
+  setSaveStatus('saving');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      await db.collection('users').doc(currentUser.uid).set({ binders });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2000);
+    } catch (e) {
+      setSaveStatus('');
+      toast('Save failed: ' + e.message, 'err');
+    }
+  }, 600); // debounce 600ms so rapid changes batch together
+}
+
+async function loadFromFirestore() {
+  if (!currentUser) return;
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    binders = doc.exists ? (doc.data().binders || []) : [];
+  } catch (e) {
+    binders = [];
+    toast('Failed to load data', 'err');
+  }
+}
+
+function setSaveStatus(state) {
+  const el = document.getElementById('save-status');
+  if (state === 'saving') { el.textContent = '💾 Saving...'; el.className = 'saving'; }
+  else if (state === 'saved') { el.textContent = '✓ Saved'; el.className = 'saved'; }
+  else { el.textContent = ''; el.className = ''; }
+}
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -907,8 +1036,7 @@ function switchTab(name, btn) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.getElementById('new-binder-name').addEventListener('keydown', e => { if (e.key === 'Enter') createBinder(); });
-renderSidebar();
-loadPokemon();
+// renderSidebar() and loadPokemon() are called by auth.onAuthStateChanged after login
 </script>
 </body>
 </html>
