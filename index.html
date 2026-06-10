@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pokemon Binder Checklist</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --card: #0f3460;
+      --accent: #e94560;
+      --accent2: #f5a623;
+      --text: #eaeaea;
+      --text-muted: #8899aa;
+      --border: #2a3a5e;
+      --success: #4caf50;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* Layout */
+    #app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: auto 1fr; min-height: 100vh; }
+    header { grid-column: 1 / -1; background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 1.4rem; color: var(--accent2); letter-spacing: 1px; }
+    header h1 span { color: var(--accent); }
+    aside { background: var(--surface); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; max-height: calc(100vh - 57px); }
+    main { padding: 20px; overflow-y: auto; max-height: calc(100vh - 57px); }
+
+    /* Buttons */
+    button { cursor: pointer; border: none; border-radius: var(--radius); font-size: 0.85rem; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; padding: 8px 16px; }
+    .btn-primary:hover { background: #c73550; }
+    .btn-secondary { background: var(--card); color: var(--text); padding: 8px 16px; border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm { padding: 4px 10px; font-size: 0.78rem; }
+    .btn-icon { background: transparent; color: var(--text-muted); padding: 4px 8px; font-size: 1rem; }
+    .btn-icon:hover { color: var(--accent); }
+    .btn-success { background: var(--success); color: #fff; padding: 6px 14px; }
+
+    /* Sidebar - Binders */
+    .sidebar-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 10px; }
+    .binder-list { list-style: none; margin-bottom: 16px; }
+    .binder-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius); cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; transition: all 0.15s; }
+    .binder-item:hover { background: var(--card); border-color: var(--border); }
+    .binder-item.active { background: var(--card); border-color: var(--accent); color: var(--accent2); }
+    .binder-item .binder-name { flex: 1; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .binder-item .binder-count { font-size: 0.72rem; color: var(--text-muted); background: var(--bg); padding: 2px 6px; border-radius: 99px; }
+    .binder-item.active .binder-count { background: var(--accent); color: #fff; }
+    .add-binder-form { display: flex; gap: 8px; margin-top: 8px; }
+    .add-binder-form input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; color: var(--text); font-size: 0.85rem; }
+    .add-binder-form input:focus { outline: none; border-color: var(--accent); }
+
+    /* Main tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+    .tab { background: transparent; color: var(--text-muted); padding: 10px 18px; border-radius: var(--radius) var(--radius) 0 0; border: 1px solid transparent; border-bottom: none; }
+    .tab.active { background: var(--surface); color: var(--accent2); border-color: var(--border); border-bottom-color: var(--surface); }
+    .tab:hover:not(.active) { color: var(--text); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Search */
+    .search-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .search-row input, .search-row select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; color: var(--text); font-size: 0.9rem; }
+    .search-row input { flex: 1; min-width: 200px; }
+    .search-row input:focus, .search-row select:focus { outline: none; border-color: var(--accent); }
+    .search-row select { background: var(--surface); }
+
+    /* Pokemon card grid */
+    .pokemon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+    .pokemon-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; cursor: pointer; transition: all 0.15s; }
+    .pokemon-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(233,69,96,0.2); }
+    .pokemon-card img { width: 80px; height: 80px; object-fit: contain; image-rendering: pixelated; }
+    .pokemon-card .pname { font-size: 0.85rem; font-weight: 600; margin-top: 6px; }
+    .pokemon-card .pname-jp { font-size: 0.72rem; color: var(--text-muted); }
+    .pokemon-card .pnum { font-size: 0.72rem; color: var(--text-muted); }
+    .type-badges { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+    .type-badge { font-size: 0.65rem; padding: 2px 7px; border-radius: 99px; font-weight: 600; text-transform: uppercase; }
+
+    /* Type colors */
+    .t-fire{background:#f08030;color:#fff} .t-water{background:#6890f0;color:#fff} .t-grass{background:#78c850;color:#fff}
+    .t-electric{background:#f8d030;color:#333} .t-psychic{background:#f85888;color:#fff} .t-ice{background:#98d8d8;color:#333}
+    .t-dragon{background:#7038f8;color:#fff} .t-dark{background:#705848;color:#fff} .t-fairy{background:#ee99ac;color:#333}
+    .t-fighting{background:#c03028;color:#fff} .t-poison{background:#a040a0;color:#fff} .t-ground{background:#e0c068;color:#333}
+    .t-rock{background:#b8a038;color:#fff} .t-bug{background:#a8b820;color:#fff} .t-ghost{background:#705898;color:#fff}
+    .t-steel{background:#b8b8d0;color:#333} .t-normal{background:#a8a878;color:#fff} .t-flying{background:#a890f0;color:#fff}
+
+    /* Modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; width: 90%; max-width: 800px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; }
+    .modal-header img { width: 60px; height: 60px; object-fit: contain; image-rendering: pixelated; }
+    .modal-header .modal-title { flex: 1; }
+    .modal-header h2 { font-size: 1.2rem; color: var(--accent2); }
+    .modal-header .modal-subtitle { font-size: 0.8rem; color: var(--text-muted); }
+    .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+    .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* TCG Cards */
+    .tcg-section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 16px 0 10px; }
+    .tcg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+    .tcg-card { background: var(--card); border: 2px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.15s; position: relative; }
+    .tcg-card:hover { border-color: var(--accent2); }
+    .tcg-card.in-binder { border-color: var(--success); }
+    .tcg-card img { width: 100%; border-radius: 6px; aspect-ratio: 2.5/3.5; object-fit: cover; }
+    .tcg-card .tcg-name { font-size: 0.72rem; margin-top: 6px; color: var(--text-muted); line-height: 1.3; }
+    .tcg-card .tcg-set { font-size: 0.65rem; color: var(--text-muted); }
+    .tcg-card .check-badge { position: absolute; top: 6px; right: 6px; background: var(--success); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; }
+    .tcg-loading { text-align: center; padding: 30px; color: var(--text-muted); }
+    .tcg-empty { text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.85rem; }
+
+    /* Binder view */
+    .binder-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+    .binder-header h2 { font-size: 1.3rem; color: var(--accent2); flex: 1; }
+    .progress-bar-wrap { background: var(--surface); border-radius: 99px; height: 8px; flex: 1; min-width: 120px; overflow: hidden; }
+    .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width 0.3s; }
+    .progress-label { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+    .binder-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .binder-empty p { margin-top: 10px; font-size: 0.9rem; }
+
+    /* Binder checklist items */
+    .binder-section { margin-bottom: 24px; }
+    .binder-section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .checklist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .checklist-item { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all 0.15s; cursor: pointer; position: relative; }
+    .checklist-item:hover { border-color: var(--accent2); }
+    .checklist-item.collected { border-color: var(--success); background: rgba(76,175,80,0.08); }
+    .checklist-item img { width: 100%; border-radius: 6px; aspect-ratio: 2.5/3.5; object-fit: cover; }
+    .checklist-item .ci-name { font-size: 0.72rem; text-align: center; color: var(--text-muted); line-height: 1.3; }
+    .checklist-item .ci-set { font-size: 0.65rem; color: var(--text-muted); }
+    .checklist-item .ci-pokemon { font-size: 0.75rem; font-weight: 600; color: var(--text); }
+    .checklist-item .remove-btn { position: absolute; top: 4px; right: 4px; background: rgba(233,69,96,0.15); color: var(--accent); border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+    .checklist-item:hover .remove-btn { opacity: 1; }
+    .collected-overlay { position: absolute; inset: 0; border-radius: 8px; background: rgba(76,175,80,0.15); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    .collected-overlay span { font-size: 1.8rem; }
+
+    /* Spinner */
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Responsive */
+    @media (max-width: 700px) { #app { grid-template-columns: 1fr; } aside { max-height: none; } }
+
+    /* No binder selected */
+    .no-binder { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; color: var(--text-muted); gap: 10px; }
+    .no-binder .big-icon { font-size: 3rem; }
+
+    /* Variant / form badges */
+    .variant-badge { font-size: 0.65rem; background: var(--card); color: var(--accent2); padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); }
+    .form-badge { font-size: 0.65rem; background: linear-gradient(135deg, #7038f8, #e94560); color: #fff; padding: 2px 8px; border-radius: 99px; font-weight: 600; letter-spacing: 0.5px; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 18px; font-size: 0.85rem; z-index: 9999; opacity: 0; transform: translateY(10px); transition: all 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.ok { border-color: var(--success); color: var(--success); }
+    #toast.err { border-color: var(--accent); color: var(--accent); }
+
+    /* filter row */
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .filter-chip { background: var(--card); border: 1px solid var(--border); border-radius: 99px; padding: 4px 12px; font-size: 0.78rem; cursor: pointer; transition: all 0.15s; }
+    .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .filter-chip:hover:not(.active) { border-color: var(--accent2); color: var(--accent2); }
+
+    /* binder checklist grouping */
+    .group-toggle { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+    .group-toggle label { font-size: 0.82rem; color: var(--text-muted); }
+    .group-toggle select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; color: var(--text); font-size: 0.82rem; }
+
+    .binder-rename-input { background: transparent; border: none; border-bottom: 1px solid var(--accent); color: var(--accent2); font-size: 1.3rem; font-weight: 700; outline: none; width: 200px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div style="font-size:1.8rem">🎴</div>
+    <h1>Pokemon <span>Binder</span> Checklist</h1>
+    <div style="flex:1"></div>
+    <span id="header-status" style="font-size:0.8rem;color:var(--text-muted)"></span>
+  </header>
+
+  <aside>
+    <div class="sidebar-title">My Binders</div>
+    <ul class="binder-list" id="binder-list"></ul>
+    <div class="add-binder-form">
+      <input type="text" id="new-binder-name" placeholder="New binder name..." maxlength="40" />
+      <button class="btn-primary btn-sm" onclick="createBinder()">+</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('browse', this)">Browse Pokemon</button>
+      <button class="tab" onclick="switchTab('binder', this)">Binder View</button>
+    </div>
+
+    <!-- Browse Tab -->
+    <div class="tab-content active" id="tab-browse">
+      <div class="search-row">
+        <input type="text" id="search-input" placeholder="Search Pokemon by name or #..." oninput="debounceSearch()" />
+        <select id="gen-filter" onchange="loadPokemon()">
+          <option value="">All Generations</option>
+          <option value="1">Gen 1 (Kanto)</option>
+          <option value="2">Gen 2 (Johto)</option>
+          <option value="3">Gen 3 (Hoenn)</option>
+          <option value="4">Gen 4 (Sinnoh)</option>
+          <option value="5">Gen 5 (Unova)</option>
+          <option value="6">Gen 6 (Kalos)</option>
+          <option value="7">Gen 7 (Alola)</option>
+          <option value="8">Gen 8 (Galar)</option>
+          <option value="9">Gen 9 (Paldea)</option>
+        </select>
+        <select id="type-filter" onchange="loadPokemon()">
+          <option value="">All Types</option>
+          <option>fire</option><option>water</option><option>grass</option><option>electric</option>
+          <option>psychic</option><option>ice</option><option>dragon</option><option>dark</option>
+          <option>fairy</option><option>fighting</option><option>poison</option><option>ground</option>
+          <option>rock</option><option>bug</option><option>ghost</option><option>steel</option>
+          <option>normal</option><option>flying</option>
+        </select>
+        <select id="form-filter" onchange="loadPokemon()">
+          <option value="">All Forms</option>
+          <option value="mega">Mega</option>
+          <option value="mega-x">Mega X</option>
+          <option value="mega-y">Mega Y</option>
+          <option value="gmax">Gigantamax</option>
+          <option value="alola">Alolan</option>
+          <option value="galar">Galarian</option>
+          <option value="hisui">Hisuian</option>
+          <option value="paldea">Paldean</option>
+          <option value="terastal">Terastal</option>
+          <option value="primal">Primal</option>
+          <option value="origin">Origin Forme</option>
+          <option value="crowned">Crowned</option>
+          <option value="hero">Hero of Many Battles</option>
+          <option value="eternamax">Eternamax</option>
+          <option value="totem">Totem</option>
+        </select>
+      </div>
+      <div id="browse-loading" class="tcg-loading" style="display:none"><div class="spinner"></div><div style="margin-top:8px">Loading Pokemon...</div></div>
+      <div class="pokemon-grid" id="pokemon-grid"></div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn-secondary" id="load-more-btn" onclick="loadMore()" style="display:none">Load More</button>
+      </div>
+    </div>
+
+    <!-- Binder Tab -->
+    <div class="tab-content" id="tab-binder">
+      <div id="binder-view-content"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Pokemon Detail Modal -->
+<div class="modal-overlay" id="modal" onclick="closeModalOnBg(event)">
+  <div class="modal">
+    <div class="modal-header" id="modal-header"></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let binders = JSON.parse(localStorage.getItem('pb_binders') || '[]');
+let activeBinder = null;
+let allPokemon = [];
+let displayedPokemon = [];
+let offset = 0;
+const PAGE = 48;
+
+// ─── Generation ranges ───────────────────────────────────────────────────────
+const GEN_RANGES = {
+  '1': [1, 151], '2': [152, 251], '3': [252, 386], '4': [387, 493],
+  '5': [494, 649], '6': [650, 721], '7': [722, 809], '8': [810, 905], '9': [906, 1025]
+};
+
+// ─── Japanese name cache ─────────────────────────────────────────────────────
+const jpCache = {};
+
+// ─── Save / Load ─────────────────────────────────────────────────────────────
+function save() { localStorage.setItem('pb_binders', JSON.stringify(binders)); }
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 2200);
+}
+
+// ─── Binder management ───────────────────────────────────────────────────────
+function createBinder() {
+  const inp = document.getElementById('new-binder-name');
+  const name = inp.value.trim();
+  if (!name) return;
+  binders.push({ id: Date.now(), name, cards: [] });
+  save();
+  inp.value = '';
+  renderSidebar();
+  toast(`Binder "${name}" created!`);
+}
+
+function deleteBinder(id) {
+  if (!confirm('Delete this binder and all its cards?')) return;
+  binders = binders.filter(b => b.id !== id);
+  if (activeBinder === id) activeBinder = null;
+  save();
+  renderSidebar();
+  renderBinderView();
+}
+
+function renameBinder(id, newName) {
+  const b = binders.find(b => b.id === id);
+  if (b && newName.trim()) { b.name = newName.trim(); save(); renderSidebar(); }
+}
+
+function selectBinder(id) {
+  activeBinder = id;
+  renderSidebar();
+  renderBinderView();
+  switchTab('binder', document.querySelectorAll('.tab')[1]);
+}
+
+function getBinder(id) { return binders.find(b => b.id === id); }
+
+function addCardToBinder(binderId, card) {
+  const b = getBinder(binderId);
+  if (!b) return false;
+  if (b.cards.find(c => c.id === card.id)) return false;
+  b.cards.push({ ...card, collected: false });
+  save();
+  return true;
+}
+
+function removeCardFromBinder(binderId, cardId) {
+  const b = getBinder(binderId);
+  if (!b) return;
+  b.cards = b.cards.filter(c => c.id !== cardId);
+  save();
+  renderBinderView();
+}
+
+function toggleCollected(binderId, cardId) {
+  const b = getBinder(binderId);
+  if (!b) return;
+  const c = b.cards.find(c => c.id === cardId);
+  if (c) { c.collected = !c.collected; save(); renderBinderView(); }
+}
+
+// ─── Sidebar render ───────────────────────────────────────────────────────────
+function renderSidebar() {
+  const ul = document.getElementById('binder-list');
+  if (binders.length === 0) {
+    ul.innerHTML = '<li style="color:var(--text-muted);font-size:0.82rem;padding:8px 10px">No binders yet. Create one below!</li>';
+    return;
+  }
+  ul.innerHTML = binders.map(b => {
+    const total = b.cards.length;
+    const done = b.cards.filter(c => c.collected).length;
+    return `<li class="binder-item ${b.id === activeBinder ? 'active' : ''}" onclick="selectBinder(${b.id})">
+      <span style="font-size:1.1rem">📓</span>
+      <span class="binder-name" title="${b.name}">${b.name}</span>
+      <span class="binder-count">${done}/${total}</span>
+      <button class="btn-icon" style="padding:2px 6px;font-size:0.8rem" onclick="event.stopPropagation();deleteBinder(${b.id})" title="Delete binder">✕</button>
+    </li>`;
+  }).join('');
+}
+
+// ─── Binder view render ───────────────────────────────────────────────────────
+function renderBinderView() {
+  const el = document.getElementById('binder-view-content');
+  if (!activeBinder) {
+    el.innerHTML = `<div class="no-binder"><div class="big-icon">📚</div><p>Select a binder from the sidebar<br>or create a new one to get started.</p></div>`;
+    return;
+  }
+  const b = getBinder(activeBinder);
+  if (!b) { el.innerHTML = ''; return; }
+
+  const total = b.cards.length;
+  const done = b.cards.filter(c => c.collected).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  if (total === 0) {
+    el.innerHTML = `
+      <div class="binder-header">
+        <h2>${b.name}</h2>
+        <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">Delete Binder</button>
+      </div>
+      <div class="binder-empty">
+        <div style="font-size:3rem">🃏</div>
+        <p>This binder is empty. Browse Pokemon and add cards to it!</p>
+        <button class="btn-primary" style="margin-top:12px" onclick="switchTab('browse', document.querySelectorAll('.tab')[0])">Browse Pokemon</button>
+      </div>`;
+    return;
+  }
+
+  // Group options
+  const groups = groupCards(b.cards, 'pokemon');
+
+  el.innerHTML = `
+    <div class="binder-header">
+      <h2>${b.name}</h2>
+      <div class="progress-bar-wrap" style="max-width:200px"><div class="progress-bar" style="width:${pct}%"></div></div>
+      <span class="progress-label">${done} / ${total} (${pct}%)</span>
+      <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">Delete</button>
+    </div>
+    <div class="group-toggle">
+      <label>Group by:</label>
+      <select onchange="renderBinderView()" id="group-by">
+        <option value="pokemon">Pokemon</option>
+        <option value="set">Set</option>
+        <option value="none">None</option>
+      </select>
+    </div>
+    <div id="binder-cards-wrap"></div>`;
+
+  // Re-render cards with selected grouping
+  const groupBy = document.getElementById('group-by')?.value || 'pokemon';
+  renderBinderCards(b, groupBy);
+}
+
+function renderBinderCards(b, groupBy) {
+  const wrap = document.getElementById('binder-cards-wrap');
+  if (!wrap) return;
+  const grouped = groupCards(b.cards, groupBy);
+
+  wrap.innerHTML = Object.entries(grouped).map(([group, cards]) => `
+    <div class="binder-section">
+      ${group !== '_all' ? `<div class="binder-section-title">${group}</div>` : ''}
+      <div class="checklist-grid">
+        ${cards.map(c => `
+          <div class="checklist-item ${c.collected ? 'collected' : ''}" onclick="toggleCollected(${b.id}, '${c.id}')">
+            <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinder(${b.id}, '${c.id}')" title="Remove from binder">✕</button>
+            ${c.imageSmall ? `<img src="${c.imageSmall}" alt="${c.cardName}" loading="lazy" />` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
+            <div class="ci-pokemon">${c.pokemonName || ''}</div>
+            <div class="ci-name">${c.cardName}</div>
+            <div class="ci-set">${c.setName}</div>
+            ${c.collected ? `<div class="collected-overlay"><span>✓</span></div>` : ''}
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  // Re-attach group-by handler
+  const sel = document.getElementById('group-by');
+  if (sel) sel.onchange = () => renderBinderCards(b, sel.value);
+}
+
+function groupCards(cards, by) {
+  if (by === 'none') return { _all: cards };
+  const groups = {};
+  for (const c of cards) {
+    const key = by === 'pokemon' ? (c.pokemonName || 'Unknown') : (c.setName || 'Unknown Set');
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  }
+  // Sort keys
+  return Object.fromEntries(Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+// ─── Form filter config ───────────────────────────────────────────────────────
+// Maps option value → suffix(es) to match in the Pokemon's API name
+const FORM_SUFFIXES = {
+  'mega':      ['-mega'],
+  'mega-x':    ['-mega-x'],
+  'mega-y':    ['-mega-y'],
+  'gmax':      ['-gmax'],
+  'alola':     ['-alola'],
+  'galar':     ['-galar'],
+  'hisui':     ['-hisui'],
+  'paldea':    ['-paldea'],
+  'terastal':  ['-terastal'],
+  'primal':    ['-primal'],
+  'origin':    ['-origin'],
+  'crowned':   ['-crowned'],
+  'hero':      ['-hero'],
+  'eternamax': ['-eternamax'],
+  'totem':     ['-totem'],
+};
+
+// Human-readable labels for form badges
+const FORM_LABELS = {
+  'mega': 'Mega', 'mega-x': 'Mega X', 'mega-y': 'Mega Y',
+  'gmax': 'Gigantamax', 'alola': 'Alolan', 'galar': 'Galarian',
+  'hisui': 'Hisuian', 'paldea': 'Paldean', 'terastal': 'Terastal',
+  'primal': 'Primal', 'origin': 'Origin', 'crowned': 'Crowned',
+  'hero': 'Hero', 'eternamax': 'Eternamax', 'totem': 'Totem',
+};
+
+// Cache for full pokemon list (including forms)
+let allPokemonForms = [];
+
+// ─── Pokemon data loading ─────────────────────────────────────────────────────
+let searchTimeout;
+let loadGeneration = 0; // incremented on each new load to cancel stale in-flight renders
+
+function debounceSearch() { clearTimeout(searchTimeout); searchTimeout = setTimeout(loadPokemon, 400); }
+
+async function loadPokemon() {
+  offset = 0;
+  displayedPokemon = [];
+  await fetchAndRenderPokemon(true);
+}
+
+async function loadMore() {
+  await fetchAndRenderPokemon(false);
+}
+
+async function fetchAndRenderPokemon(reset) {
+  const loading = document.getElementById('browse-loading');
+  const grid = document.getElementById('pokemon-grid');
+  const btn = document.getElementById('load-more-btn');
+  const search = document.getElementById('search-input').value.trim().toLowerCase();
+  const genFilter = document.getElementById('gen-filter').value;
+  const typeFilter = document.getElementById('type-filter').value;
+  const formFilter = document.getElementById('form-filter').value;
+
+  if (reset) { grid.innerHTML = ''; allPokemon = []; offset = 0; loadGeneration++; }
+  const myGen = loadGeneration;
+
+  loading.style.display = 'block';
+  btn.style.display = 'none';
+
+  // Disable gen filter when a form is selected (forms span generations)
+  const genSelect = document.getElementById('gen-filter');
+  genSelect.disabled = !!formFilter;
+  genSelect.style.opacity = formFilter ? '0.4' : '1';
+
+  try {
+    let speciesList = [];
+
+    if (formFilter) {
+      // Load full pokemon list (includes forms) and filter by suffix
+      if (allPokemonForms.length === 0) {
+        loading.querySelector('div:last-child') && (loading.querySelector('div:last-child').textContent = 'Loading all forms...');
+        const res = await fetch('https://pokeapi.co/api/v2/pokemon?limit=2000');
+        const data = await res.json();
+        allPokemonForms = data.results.map(p => ({ name: p.name, url: p.url }));
+      }
+      const suffixes = FORM_SUFFIXES[formFilter] || ['-' + formFilter];
+      speciesList = allPokemonForms.filter(p => suffixes.some(s => p.name.endsWith(s)));
+    } else if (genFilter) {
+      const [min, max] = GEN_RANGES[genFilter];
+      speciesList = Array.from({ length: max - min + 1 }, (_, i) => ({
+        name: null, url: null, id: min + i
+      }));
+    } else {
+      if (allPokemon.length === 0) {
+        const res = await fetch('https://pokeapi.co/api/v2/pokemon-species?limit=1025');
+        const data = await res.json();
+        allPokemon = data.results.map((s, i) => ({ name: s.name, url: s.url, id: i + 1 }));
+      }
+      speciesList = allPokemon;
+    }
+
+    // Apply search filter
+    let filtered = speciesList;
+    if (search) {
+      filtered = speciesList.filter(p => {
+        const nameMatch = p.name && p.name.includes(search);
+        const numMatch = p.id && String(p.id) === search;
+        return nameMatch || numMatch;
+      });
+      if (filtered.length === 0 && isNaN(search)) {
+        filtered = speciesList.filter(p => !p.name || p.name.toLowerCase().includes(search));
+      }
+    }
+
+    const page = filtered.slice(offset, offset + PAGE);
+    offset += page.length;
+
+    if (myGen !== loadGeneration) { loading.style.display = 'none'; return; }
+
+    if (page.length === 0 && reset) {
+      grid.innerHTML = '<div class="tcg-empty">No Pokemon found for this filter.</div>';
+      loading.style.display = 'none';
+      return;
+    }
+
+    // Fetch pokemon details
+    const details = await Promise.allSettled(page.map(p =>
+      fetch(`https://pokeapi.co/api/v2/pokemon/${p.name || p.id}`).then(r => r.json())
+    ));
+
+    if (myGen !== loadGeneration) { loading.style.display = 'none'; return; }
+
+    // For form mode: get species via the pokemon's species url; for normal mode: use id
+    const speciesDetails = await Promise.allSettled(details.map((d, i) => {
+      if (d.status !== 'fulfilled') return Promise.resolve(null);
+      const speciesUrl = d.value.species?.url;
+      if (speciesUrl) return fetch(speciesUrl).then(r => r.json()).catch(() => null);
+      return fetch(`https://pokeapi.co/api/v2/pokemon-species/${page[i].id}`).then(r => r.json()).catch(() => null);
+    }));
+
+    if (myGen !== loadGeneration) { loading.style.display = 'none'; return; }
+
+    for (let i = 0; i < details.length; i++) {
+      if (details[i].status !== 'fulfilled') continue;
+      const d = details[i].value;
+      const sp = speciesDetails[i].status === 'fulfilled' ? speciesDetails[i].value : null;
+
+      // Type filter
+      if (typeFilter && !d.types.some(t => t.type.name === typeFilter)) continue;
+
+      const jpName = sp ? (sp.names?.find(n => n.language.name === 'ja-Hrkt')?.name || sp.names?.find(n => n.language.name === 'ja')?.name || '') : '';
+      const enName = sp ? (sp.names?.find(n => n.language.name === 'en')?.name || d.name) : d.name;
+
+      // Derive the form label from the API name (e.g. "charizard-gmax" → "Gigantamax")
+      const formLabel = formFilter
+        ? FORM_LABELS[formFilter] || ''
+        : getFormLabelFromName(d.name, enName);
+
+      const sprite = d.sprites?.other?.['official-artwork']?.front_default
+        || d.sprites?.other?.['official-artwork']?.front_shiny
+        || d.sprites?.front_default || '';
+
+      const card = document.createElement('div');
+      card.className = 'pokemon-card';
+      card.onclick = () => openPokemonModal(d, sp);
+      card.innerHTML = `
+        ${sprite ? `<img src="${sprite}" alt="${enName}" loading="lazy" />` : `<div style="width:80px;height:80px;background:var(--card);border-radius:8px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:2rem">❓</div>`}
+        <div class="pnum">#${String(d.id).padStart(4, '0')}</div>
+        <div class="pname">${enName}</div>
+        ${jpName ? `<div class="pname-jp">${jpName}</div>` : ''}
+        ${formLabel ? `<div style="margin-top:4px"><span class="form-badge">${formLabel}</span></div>` : ''}
+        <div class="type-badges">
+          ${d.types.map(t => `<span class="type-badge t-${t.type.name}">${t.type.name}</span>`).join('')}
+        </div>`;
+      grid.appendChild(card);
+    }
+
+    btn.style.display = (offset < filtered.length) ? 'inline-block' : 'none';
+  } catch (e) {
+    console.error(e);
+    grid.innerHTML += '<div class="tcg-empty" style="color:var(--accent)">Failed to load Pokemon. Check your connection.</div>';
+  }
+  loading.style.display = 'none';
+}
+
+// Derive a form label from the raw API name when no form filter is active
+function getFormLabelFromName(apiName, baseName) {
+  for (const [key, suffixes] of Object.entries(FORM_SUFFIXES)) {
+    if (suffixes.some(s => apiName.endsWith(s))) return FORM_LABELS[key] || '';
+  }
+  return '';
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+let currentPokemon = null;
+
+async function openPokemonModal(pokemon, species) {
+  currentPokemon = { pokemon, species };
+  const modal = document.getElementById('modal');
+  const header = document.getElementById('modal-header');
+  const body = document.getElementById('modal-body');
+
+  const enName = species ? (species.names?.find(n => n.language.name === 'en')?.name || pokemon.name) : pokemon.name;
+  const jpName = species ? (species.names?.find(n => n.language.name === 'ja-Hrkt')?.name || species.names?.find(n => n.language.name === 'ja')?.name || '') : '';
+  const sprite = pokemon.sprites?.other?.['official-artwork']?.front_default || pokemon.sprites?.front_default || '';
+  const types = pokemon.types.map(t => t.type.name);
+  const category = species?.genera?.find(g => g.language.name === 'en')?.genus || '';
+
+  header.innerHTML = `
+    ${sprite ? `<img src="${sprite}" alt="${enName}" />` : `<div style="width:60px;height:60px;background:var(--card);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2rem">❓</div>`}
+    <div class="modal-title">
+      <h2>#${String(pokemon.id).padStart(4,'0')} ${enName}</h2>
+      <div class="modal-subtitle">${jpName}${category ? ' — ' + category : ''}</div>
+      <div class="type-badges" style="justify-content:flex-start;margin-top:4px">
+        ${types.map(t => `<span class="type-badge t-${t}">${t}</span>`).join('')}
+      </div>
+    </div>
+    <button class="btn-icon" style="font-size:1.3rem;align-self:flex-start" onclick="closeModal()">✕</button>`;
+
+  body.innerHTML = `<div class="tcg-loading"><div class="spinner"></div><div style="margin-top:8px">Loading TCG cards...</div></div>`;
+  modal.classList.add('open');
+
+  // Load variants
+  let variantPokemon = [{ name: enName, apiName: pokemon.name, jpName }];
+  if (species?.varieties) {
+    for (const v of species.varieties) {
+      if (v.pokemon.name !== pokemon.name) {
+        const vName = v.pokemon.name.replace(pokemon.name + '-', '').replace(/-/g, ' ');
+        variantPokemon.push({ name: enName + ' (' + vName + ')', apiName: v.pokemon.name, jpName });
+      }
+    }
+  }
+
+  // Fetch TCG cards
+  await loadTCGCards(body, enName, variantPokemon, activeBinder);
+}
+
+async function loadTCGCards(body, enName, variants, binderId) {
+  try {
+    const query = encodeURIComponent(`name:"${enName}"`);
+    const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=${query}&pageSize=50&orderBy=set.releaseDate`);
+    const data = await res.json();
+    const cards = data.data || [];
+
+    if (cards.length === 0) {
+      body.innerHTML = `<div class="tcg-empty">No TCG cards found for ${enName}.</div>`;
+      return;
+    }
+
+    // Group by set
+    const bySet = {};
+    for (const c of cards) {
+      const setName = c.set?.name || 'Unknown Set';
+      if (!bySet[setName]) bySet[setName] = [];
+      bySet[setName].push(c);
+    }
+
+    // Binder selector for adding
+    const binderOptions = binders.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    const binderSelect = binders.length > 0
+      ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Add to binder:</label>
+          <select id="modal-binder-select" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-size:0.82rem">
+            ${binderOptions}
+          </select>
+        </div>`
+      : `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">Create a binder in the sidebar to add cards.</div>`;
+
+    // Variants info
+    const variantHtml = variants.length > 1
+      ? `<div style="margin-bottom:12px">${variants.map(v => `<span class="variant-badge">${v.name}</span>`).join(' ')}</div>`
+      : '';
+
+    body.innerHTML = binderSelect + variantHtml +
+      Object.entries(bySet).map(([setName, setCards]) => `
+        <div class="tcg-section-title">${setName} (${setCards.length})</div>
+        <div class="tcg-grid">
+          ${setCards.map(c => {
+            const inBinder = binderId && getBinder(binderId)?.cards.find(bc => bc.id === c.id);
+            return `<div class="tcg-card ${inBinder ? 'in-binder' : ''}" onclick="handleTCGCardClick('${c.id}', '${enName.replace(/'/g,"\\'")}')">
+              ${inBinder ? `<div class="check-badge">✓</div>` : ''}
+              ${c.images?.small ? `<img src="${c.images.small}" alt="${c.name}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
+              <div class="tcg-name">${c.name}${c.number ? ' #'+c.number : ''}</div>
+              <div class="tcg-set">${c.rarity || ''}</div>
+            </div>`;
+          }).join('')}
+        </div>`).join('');
+  } catch (e) {
+    console.error(e);
+    body.innerHTML = `<div class="tcg-empty" style="color:var(--accent)">Failed to load TCG cards. Check your connection or try again.</div>`;
+  }
+}
+
+function handleTCGCardClick(cardId, pokemonName) {
+  const selEl = document.getElementById('modal-binder-select');
+  if (!selEl) { toast('Create a binder first!', 'err'); return; }
+  const binderId = parseInt(selEl.value);
+  const b = getBinder(binderId);
+  if (!b) return;
+
+  // Find card data from the cached modal
+  const cards = document.querySelectorAll('.tcg-card');
+  let cardData = null;
+  for (const el of cards) {
+    if (el.onclick && el.getAttribute('onclick')?.includes(cardId)) {
+      const img = el.querySelector('img');
+      const nameEl = el.querySelector('.tcg-name');
+      const setEl = el.querySelectorAll('.tcg-set');
+      cardData = {
+        id: cardId,
+        pokemonName,
+        cardName: nameEl?.textContent || cardId,
+        setName: '', // filled below
+        imageSmall: img?.src || '',
+      };
+    }
+  }
+
+  // Better: re-fetch from already loaded data in modal
+  addCardToBinder(binderId, getModalCardData(cardId, pokemonName));
+  renderSidebar();
+  // Refresh modal to show check badge
+  const el = document.querySelector(`.tcg-card[onclick*="${cardId}"]`);
+  if (el) { el.classList.add('in-binder'); el.insertAdjacentHTML('afterbegin', '<div class="check-badge">✓</div>'); }
+  toast(`Added to "${b.name}"!`);
+}
+
+// Store modal cards for lookup
+let modalCardsCache = {};
+
+function getModalCardData(cardId, pokemonName) {
+  return modalCardsCache[cardId] || { id: cardId, pokemonName, cardName: cardId, setName: '', imageSmall: '' };
+}
+
+// Override loadTCGCards to cache card data
+const _origLoadTCGCards = loadTCGCards;
+async function loadTCGCards(body, enName, variants, binderId) {
+  try {
+    const query = encodeURIComponent(`name:"${enName}"`);
+    const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=${query}&pageSize=50&orderBy=set.releaseDate`);
+    const data = await res.json();
+    const cards = data.data || [];
+
+    // Cache cards
+    modalCardsCache = {};
+    for (const c of cards) {
+      modalCardsCache[c.id] = {
+        id: c.id,
+        pokemonName: enName,
+        cardName: c.name + (c.number ? ' #' + c.number : ''),
+        setName: c.set?.name || '',
+        imageSmall: c.images?.small || '',
+        imageLarge: c.images?.large || '',
+        rarity: c.rarity || '',
+      };
+    }
+
+    if (cards.length === 0) {
+      body.innerHTML = `<div class="tcg-empty">No TCG cards found for ${enName}.</div>`;
+      return;
+    }
+
+    const bySet = {};
+    for (const c of cards) {
+      const setName = c.set?.name || 'Unknown Set';
+      if (!bySet[setName]) bySet[setName] = [];
+      bySet[setName].push(c);
+    }
+
+    const binderOptions = binders.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    const binderSelect = binders.length > 0
+      ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Add to binder:</label>
+          <select id="modal-binder-select" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-size:0.82rem">
+            ${binderOptions}
+          </select>
+        </div>`
+      : `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">Create a binder in the sidebar to add cards.</div>`;
+
+    const variantHtml = variants.length > 1
+      ? `<div style="margin-bottom:12px">${variants.map(v => `<span class="variant-badge">${v.name}</span>`).join(' ')}</div>`
+      : '';
+
+    body.innerHTML = binderSelect + variantHtml +
+      Object.entries(bySet).map(([setName, setCards]) => `
+        <div class="tcg-section-title">${setName} (${setCards.length})</div>
+        <div class="tcg-grid">
+          ${setCards.map(c => {
+            const existingBinder = binders.find(b => b.cards.find(bc => bc.id === c.id));
+            const inCurrentBinder = binderId && getBinder(binderId)?.cards.find(bc => bc.id === c.id);
+            return `<div class="tcg-card ${inCurrentBinder ? 'in-binder' : ''}" id="tcg-${c.id}" onclick="handleTCGCardClick2('${c.id}')">
+              ${inCurrentBinder ? `<div class="check-badge">✓</div>` : ''}
+              ${c.images?.small ? `<img src="${c.images.small}" alt="${c.name}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
+              <div class="tcg-name">${c.name}${c.number ? ' #'+c.number : ''}</div>
+              <div class="tcg-set">${c.rarity || c.set?.series || ''}</div>
+            </div>`;
+          }).join('')}
+        </div>`).join('');
+  } catch (e) {
+    console.error(e);
+    body.innerHTML = `<div class="tcg-empty" style="color:var(--accent)">Failed to load TCG cards. Check your connection or try again.</div>`;
+  }
+}
+
+function handleTCGCardClick2(cardId) {
+  const selEl = document.getElementById('modal-binder-select');
+  if (!selEl) { toast('Create a binder first!', 'err'); return; }
+  const binderId = parseInt(selEl.value);
+  const b = getBinder(binderId);
+  if (!b) return;
+
+  const card = modalCardsCache[cardId];
+  if (!card) return;
+
+  const alreadyIn = b.cards.find(c => c.id === cardId);
+  if (alreadyIn) {
+    toast(`Already in "${b.name}"`, 'err');
+    return;
+  }
+
+  addCardToBinder(binderId, card);
+  renderSidebar();
+
+  const el = document.getElementById('tcg-' + cardId);
+  if (el) {
+    el.classList.add('in-binder');
+    if (!el.querySelector('.check-badge')) el.insertAdjacentHTML('afterbegin', '<div class="check-badge">✓</div>');
+  }
+  toast(`Added to "${b.name}"!`);
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function closeModalOnBg(e) { if (e.target === document.getElementById('modal')) closeModal(); }
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'binder') renderBinderView();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.getElementById('new-binder-name').addEventListener('keydown', e => { if (e.key === 'Enter') createBinder(); });
+renderSidebar();
+loadPokemon();
+</script>
+</body>
+</html>
