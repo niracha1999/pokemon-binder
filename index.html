@@ -968,9 +968,11 @@ function getFormLabelFromName(apiName, baseName) {
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 let currentPokemon = null;
+let modalMode = 'pokemon'; // 'pokemon' | 'cards'
 
 async function openPokemonModal(pokemon, species) {
   currentPokemon = { pokemon, species };
+  modalMode = 'pokemon';
   const modal = document.getElementById('modal');
   const header = document.getElementById('modal-header');
   const body = document.getElementById('modal-body');
@@ -981,265 +983,219 @@ async function openPokemonModal(pokemon, species) {
   const types = pokemon.types.map(t => t.type.name);
   const category = species?.genera?.find(g => g.language.name === 'en')?.genus || '';
 
+  // Build binder selector — default to activeBinder
+  const binderOpts = binders.map(b =>
+    `<option value="${b.id}" ${b.id === activeBinder ? 'selected' : ''}>${b.name}</option>`
+  ).join('');
+  const binderSelectHtml = binders.length > 0
+    ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <span style="font-size:0.72rem;color:var(--text-muted)">Binder:</span>
+        <select id="modal-binder-select" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:0.8rem;flex:1;min-width:120px">
+          ${binderOpts}
+        </select>
+       </div>`
+    : `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Create a binder to add cards.</div>`;
+
   header.innerHTML = `
     ${sprite ? `<img src="${sprite}" alt="${enName}" />` : `<div style="width:60px;height:60px;background:var(--card);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2rem">❓</div>`}
-    <div class="modal-title">
+    <div class="modal-title" style="flex:1">
       <h2>#${String(pokemon.id).padStart(4,'0')} ${enName}</h2>
       <div class="modal-subtitle">${jpName}${category ? ' — ' + category : ''}</div>
       <div class="type-badges" style="justify-content:flex-start;margin-top:4px">
         ${types.map(t => `<span class="type-badge t-${t}">${t}</span>`).join('')}
       </div>
+      ${binderSelectHtml}
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;align-self:flex-start;align-items:flex-end">
-      ${binders.length > 0 ? `<button class="btn-success btn-sm" onclick="addPokemonToBinder_fromModal()" title="Add this Pokemon (as artwork placeholder) to selected binder">+ Add Pokemon</button>` : ''}
-      <button class="btn-icon" style="font-size:1.3rem" onclick="closeModal()">✕</button>
-    </div>`;
+    <button class="btn-icon" style="font-size:1.3rem;align-self:flex-start" onclick="closeModal()">✕</button>`;
 
-  body.innerHTML = `<div class="tcg-loading"><div class="spinner"></div><div style="margin-top:8px">Loading TCG cards...</div></div>`;
+  // Tab bar + content area
+  body.innerHTML = `
+    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0">
+      <button id="modal-tab-pokemon" class="tab active" style="border-radius:8px 8px 0 0;padding:8px 16px;font-size:0.85rem" onclick="switchModalTab('pokemon')">🖼 Add Pokemon</button>
+      <button id="modal-tab-cards" class="tab" style="border-radius:8px 8px 0 0;padding:8px 16px;font-size:0.85rem" onclick="switchModalTab('cards')">🃏 Add Cards</button>
+    </div>
+    <div id="modal-tab-content"><div class="tcg-loading"><div class="spinner"></div><div style="margin-top:8px">Loading...</div></div></div>`;
+
   modal.classList.add('open');
 
-  // Load variants
-  let variantPokemon = [{ name: enName, apiName: pokemon.name, jpName }];
+  // Gather all variants from species
+  let variantApiNames = [pokemon.name];
   if (species?.varieties) {
     for (const v of species.varieties) {
-      if (v.pokemon.name !== pokemon.name) {
-        const vName = v.pokemon.name.replace(pokemon.name + '-', '').replace(/-/g, ' ');
-        variantPokemon.push({ name: enName + ' (' + vName + ')', apiName: v.pokemon.name, jpName });
-      }
+      if (v.pokemon.name !== pokemon.name) variantApiNames.push(v.pokemon.name);
     }
   }
+  currentPokemon.enName = enName;
+  currentPokemon.jpName = jpName;
+  currentPokemon.sprite = sprite;
+  currentPokemon.variantApiNames = variantApiNames;
 
-  // Fetch TCG cards
-  await loadTCGCards(body, enName, variantPokemon, activeBinder);
+  // Load Pokemon tab by default
+  renderPokemonTab();
 }
 
-async function loadTCGCards(body, enName, variants, binderId) {
-  try {
-    const query = encodeURIComponent(`name:"${enName}"`);
-    const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=${query}&pageSize=50&orderBy=set.releaseDate`);
-    const data = await res.json();
-    const cards = data.data || [];
+// ─── Modal tab switching ──────────────────────────────────────────────────────
+function switchModalTab(mode) {
+  modalMode = mode;
+  document.getElementById('modal-tab-pokemon').classList.toggle('active', mode === 'pokemon');
+  document.getElementById('modal-tab-cards').classList.toggle('active', mode === 'cards');
+  if (mode === 'pokemon') renderPokemonTab();
+  else renderCardsTab();
+}
 
-    if (cards.length === 0) {
-      body.innerHTML = `<div class="tcg-empty">No TCG cards found for ${enName}.</div>`;
-      return;
-    }
+function getModalBinderId() {
+  const s = document.getElementById('modal-binder-select');
+  return s ? parseInt(s.value) : activeBinder;
+}
 
-    // Group by set
-    const bySet = {};
-    for (const c of cards) {
-      const setName = c.set?.name || 'Unknown Set';
-      if (!bySet[setName]) bySet[setName] = [];
-      bySet[setName].push(c);
-    }
+// ─── Pokemon tab: all variants with artwork + Add button ──────────────────────
+async function renderPokemonTab() {
+  const content = document.getElementById('modal-tab-content');
+  if (!content || !currentPokemon) return;
+  content.innerHTML = '<div class="tcg-loading"><div class="spinner"></div><div style="margin-top:8px">Loading forms...</div></div>';
+  const { pokemon, enName, jpName, variantApiNames } = currentPokemon;
 
-    // Binder selector for adding
-    const binderOptions = binders.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-    const binderSelect = binders.length > 0
-      ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-          <label style="font-size:0.82rem;color:var(--text-muted)">Add to binder:</label>
-          <select id="modal-binder-select" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-size:0.82rem">
-            ${binderOptions}
-          </select>
-        </div>`
-      : `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">Create a binder in the sidebar to add cards.</div>`;
+  const variantDetails = await Promise.allSettled(
+    variantApiNames.map(name => fetch(`https://pokeapi.co/api/v2/pokemon/${name}`).then(r => r.json()).catch(() => null))
+  );
 
-    // Variants info
-    const variantHtml = variants.length > 1
-      ? `<div style="margin-bottom:12px">${variants.map(v => `<span class="variant-badge">${v.name}</span>`).join(' ')}</div>`
-      : '';
+  let html = `<div class="tcg-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">`;
+  for (let i = 0; i < variantDetails.length; i++) {
+    if (variantDetails[i].status !== 'fulfilled' || !variantDetails[i].value) continue;
+    const vd = variantDetails[i].value;
+    const sprite = vd.sprites?.other?.['official-artwork']?.front_default
+      || vd.sprites?.other?.['official-artwork']?.front_shiny
+      || vd.sprites?.front_default || '';
+    const formLabel = getFormLabelFromName(vd.name, enName);
+    const suffix = vd.name !== pokemon.name ? vd.name.replace(pokemon.name + '-', '').replace(/-/g,' ') : '';
+    const displayName = i === 0 ? enName : (formLabel ? `${enName} (${formLabel})` : `${enName} (${suffix})`);
+    const types = vd.types.map(t => t.type.name);
+    const safeDisplay = displayName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const safeSprite = sprite.replace(/'/g,"\\'");
+    const safeJP = (jpName||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
-    body.innerHTML = binderSelect + variantHtml +
-      Object.entries(bySet).map(([setName, setCards]) => `
-        <div class="tcg-section-title">${setName} (${setCards.length})</div>
-        <div class="tcg-grid">
-          ${setCards.map(c => {
-            const inBinder = binderId && getBinder(binderId)?.cards.find(bc => bc.id === c.id);
-            return `<div class="tcg-card ${inBinder ? 'in-binder' : ''}" onclick="handleTCGCardClick('${c.id}', '${enName.replace(/'/g,"\\'")}')">
-              ${inBinder ? `<div class="check-badge">✓</div>` : ''}
-              ${c.images?.small ? `<img src="${c.images.small}" alt="${c.name}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
-              <div class="tcg-name">${c.name}${c.number ? ' #'+c.number : ''}</div>
-              <div class="tcg-set">${c.rarity || ''}</div>
-            </div>`;
-          }).join('')}
-        </div>`).join('');
-  } catch (e) {
-    console.error(e);
-    body.innerHTML = `<div class="tcg-empty" style="color:var(--accent)">Failed to load TCG cards. Check your connection or try again.</div>`;
+    html += `<div class="tcg-card" id="variant-${vd.id}-${formLabel||'base'}" onclick="addVariantToBinder(${vd.id},'${formLabel}','${safeDisplay}','${safeSprite}','${safeJP}',${JSON.stringify(types)})">
+      ${sprite ? `<img src="${sprite}" alt="${displayName}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">❓</div>`}
+      <div class="tcg-name" style="font-weight:600">${displayName}</div>
+      ${formLabel ? `<div style="margin:3px 0"><span class="form-badge">${formLabel}</span></div>` : ''}
+      <div class="tcg-set">${types.map(t=>`<span class="type-badge t-${t}" style="font-size:0.6rem">${t}</span>`).join(' ')}</div>
+    </div>`;
   }
+  html += '</div>';
+  content.innerHTML = html;
+  refreshVariantInBinderState();
 }
 
-function handleTCGCardClick(cardId, pokemonName) {
-  const selEl = document.getElementById('modal-binder-select');
-  if (!selEl) { toast('Create a binder first!', 'err'); return; }
-  const binderId = parseInt(selEl.value);
+function refreshVariantInBinderState() {
+  const binderId = getModalBinderId();
   const b = getBinder(binderId);
   if (!b) return;
-
-  // Find card data from the cached modal
-  const cards = document.querySelectorAll('.tcg-card');
-  let cardData = null;
-  for (const el of cards) {
-    if (el.onclick && el.getAttribute('onclick')?.includes(cardId)) {
-      const img = el.querySelector('img');
-      const nameEl = el.querySelector('.tcg-name');
-      const setEl = el.querySelectorAll('.tcg-set');
-      cardData = {
-        id: cardId,
-        pokemonName,
-        cardName: nameEl?.textContent || cardId,
-        setName: '', // filled below
-        imageSmall: img?.src || '',
-      };
-    }
-  }
-
-  // Better: re-fetch from already loaded data in modal
-  addCardToBinder(binderId, getModalCardData(cardId, pokemonName));
-  renderSidebar();
-  // Refresh modal to show check badge
-  const el = document.querySelector(`.tcg-card[onclick*="${cardId}"]`);
-  if (el) { el.classList.add('in-binder'); el.insertAdjacentHTML('afterbegin', '<div class="check-badge">✓</div>'); }
-  toast(`Added to "${b.name}"!`);
+  document.querySelectorAll('[id^="variant-"]').forEach(el => {
+    const parts = el.id.split('-');
+    const pokeId = parts[1];
+    const form = parts.slice(2).join('-');
+    const inBinder = b.cards.some(c => c.itemType === 'pokemon' && String(c.pokedexId) === pokeId && (c.formLabel||'base') === form);
+    el.classList.toggle('in-binder', inBinder);
+    const existing = el.querySelector('.check-badge');
+    if (inBinder && !existing) el.insertAdjacentHTML('afterbegin','<div class="check-badge">✓</div>');
+    if (!inBinder && existing) existing.remove();
+  });
 }
 
-// Store modal cards for lookup
+function addVariantToBinder(pokemonId, formLabel, displayName, sprite, jpName, types) {
+  const binderId = getModalBinderId();
+  const b = getBinder(binderId);
+  if (!b) { toast('Select a binder first!', 'err'); return; }
+
+  const uid = `poke-${pokemonId}-${formLabel||'base'}`;
+  if (b.cards.find(c => c.id === uid)) { toast(`Already in "${b.name}"`, 'err'); return; }
+
+  addCardToBinder(binderId, {
+    id: uid, itemType: 'pokemon',
+    pokemonName: displayName.replace(/ \(.*\)$/, ''),
+    pokemonNameJP: jpName,
+    pokedexId: pokemonId,
+    types, formLabel: formLabel || '',
+    artworkUrl: sprite, imageSmall: sprite,
+    cardName: displayName, setName: formLabel || 'Pokémon',
+    collected: false,
+  });
+  renderSidebar();
+  refreshVariantInBinderState();
+  toast(`Added ${displayName} to "${b.name}"!`);
+}
+
+// ─── Cards tab: TCG cards ─────────────────────────────────────────────────────
 let modalCardsCache = {};
 
-function getModalCardData(cardId, pokemonName) {
-  return modalCardsCache[cardId] || { id: cardId, pokemonName, cardName: cardId, setName: '', imageSmall: '' };
-}
+async function renderCardsTab() {
+  const content = document.getElementById('modal-tab-content');
+  if (!content || !currentPokemon) return;
+  content.innerHTML = '<div class="tcg-loading"><div class="spinner"></div><div style="margin-top:8px">Loading TCG cards...</div></div>';
+  const { enName } = currentPokemon;
+  const binderId = getModalBinderId();
 
-// Override loadTCGCards to cache card data
-const _origLoadTCGCards = loadTCGCards;
-async function loadTCGCards(body, enName, variants, binderId) {
   try {
     const query = encodeURIComponent(`name:"${enName}"`);
     const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=${query}&pageSize=50&orderBy=set.releaseDate`);
     const data = await res.json();
     const cards = data.data || [];
 
-    // Cache cards
     modalCardsCache = {};
     for (const c of cards) {
       modalCardsCache[c.id] = {
-        id: c.id,
-        pokemonName: enName,
+        id: c.id, pokemonName: enName,
         cardName: c.name + (c.number ? ' #' + c.number : ''),
-        setName: c.set?.name || '',
-        imageSmall: c.images?.small || '',
-        imageLarge: c.images?.large || '',
-        rarity: c.rarity || '',
+        setName: c.set?.name || '', imageSmall: c.images?.small || '',
+        imageLarge: c.images?.large || '', rarity: c.rarity || '',
       };
     }
 
-    if (cards.length === 0) {
-      body.innerHTML = `<div class="tcg-empty">No TCG cards found for ${enName}.</div>`;
-      return;
-    }
+    if (cards.length === 0) { content.innerHTML = `<div class="tcg-empty">No TCG cards found for ${enName}.</div>`; return; }
 
     const bySet = {};
-    for (const c of cards) {
-      const setName = c.set?.name || 'Unknown Set';
-      if (!bySet[setName]) bySet[setName] = [];
-      bySet[setName].push(c);
-    }
+    for (const c of cards) { const s = c.set?.name || 'Unknown Set'; if (!bySet[s]) bySet[s] = []; bySet[s].push(c); }
 
-    const binderOptions = binders.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-    const binderSelect = binders.length > 0
-      ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-          <label style="font-size:0.82rem;color:var(--text-muted)">Add to binder:</label>
-          <select id="modal-binder-select" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-size:0.82rem">
-            ${binderOptions}
-          </select>
-        </div>`
-      : `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">Create a binder in the sidebar to add cards.</div>`;
-
-    const variantHtml = variants.length > 1
-      ? `<div style="margin-bottom:12px">${variants.map(v => `<span class="variant-badge">${v.name}</span>`).join(' ')}</div>`
-      : '';
-
-    body.innerHTML = binderSelect + variantHtml +
-      Object.entries(bySet).map(([setName, setCards]) => `
-        <div class="tcg-section-title">${setName} (${setCards.length})</div>
-        <div class="tcg-grid">
-          ${setCards.map(c => {
-            const existingBinder = binders.find(b => b.cards.find(bc => bc.id === c.id));
-            const inCurrentBinder = binderId && getBinder(binderId)?.cards.find(bc => bc.id === c.id);
-            return `<div class="tcg-card ${inCurrentBinder ? 'in-binder' : ''}" id="tcg-${c.id}" onclick="handleTCGCardClick2('${c.id}')">
-              ${inCurrentBinder ? `<div class="check-badge">✓</div>` : ''}
-              ${c.images?.small ? `<img src="${c.images.small}" alt="${c.name}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
-              <div class="tcg-name">${c.name}${c.number ? ' #'+c.number : ''}</div>
-              <div class="tcg-set">${c.rarity || c.set?.series || ''}</div>
-            </div>`;
-          }).join('')}
-        </div>`).join('');
+    content.innerHTML = Object.entries(bySet).map(([setName, setCards]) => `
+      <div class="tcg-section-title">${setName} (${setCards.length})</div>
+      <div class="tcg-grid">
+        ${setCards.map(c => {
+          const inBinder = binderId && getBinder(binderId)?.cards.find(bc => bc.id === c.id);
+          return `<div class="tcg-card ${inBinder ? 'in-binder' : ''}" id="tcg-${c.id}" onclick="addTCGCardToBinder('${c.id}')">
+            ${inBinder ? `<div class="check-badge">✓</div>` : ''}
+            ${c.images?.small ? `<img src="${c.images.small}" alt="${c.name}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
+            <div class="tcg-name">${c.name}${c.number ? ' #'+c.number : ''}</div>
+            <div class="tcg-set">${c.rarity || c.set?.series || ''}</div>
+          </div>`;
+        }).join('')}
+      </div>`).join('');
   } catch (e) {
     console.error(e);
-    body.innerHTML = `<div class="tcg-empty" style="color:var(--accent)">Failed to load TCG cards. Check your connection or try again.</div>`;
+    content.innerHTML = `<div class="tcg-empty" style="color:var(--accent)">Failed to load TCG cards.</div>`;
   }
 }
 
-function handleTCGCardClick2(cardId) {
-  const selEl = document.getElementById('modal-binder-select');
-  if (!selEl) { toast('Create a binder first!', 'err'); return; }
-  const binderId = parseInt(selEl.value);
+function addTCGCardToBinder(cardId) {
+  const binderId = getModalBinderId();
   const b = getBinder(binderId);
-  if (!b) return;
-
+  if (!b) { toast('Select a binder first!', 'err'); return; }
   const card = modalCardsCache[cardId];
   if (!card) return;
-
-  const alreadyIn = b.cards.find(c => c.id === cardId);
-  if (alreadyIn) {
-    toast(`Already in "${b.name}"`, 'err');
-    return;
-  }
-
+  if (b.cards.find(c => c.id === cardId)) { toast(`Already in "${b.name}"`, 'err'); return; }
   addCardToBinder(binderId, card);
   renderSidebar();
-
   const el = document.getElementById('tcg-' + cardId);
-  if (el) {
-    el.classList.add('in-binder');
-    if (!el.querySelector('.check-badge')) el.insertAdjacentHTML('afterbegin', '<div class="check-badge">✓</div>');
-  }
+  if (el) { el.classList.add('in-binder'); if (!el.querySelector('.check-badge')) el.insertAdjacentHTML('afterbegin', '<div class="check-badge">✓</div>'); }
   toast(`Added to "${b.name}"!`);
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
 function closeModalOnBg(e) { if (e.target === document.getElementById('modal')) closeModal(); }
 
-// ─── Add Pokemon (not specific card) to binder from modal ─────────────────────
+// ─── Legacy stub removed — replaced by addVariantToBinder / addTCGCardToBinder
 function addPokemonToBinder_fromModal() {
-  const selEl = document.getElementById('modal-binder-select');
-  if (!selEl || !currentPokemon) { toast('Select a binder first!', 'err'); return; }
-  const binderId = parseInt(selEl.value);
-  const b = getBinder(binderId);
-  if (!b) return;
-  const { pokemon, species } = currentPokemon;
-  const enName = species ? (species.names?.find(n => n.language.name === 'en')?.name || pokemon.name) : pokemon.name;
-  const jpName = species ? (species.names?.find(n => n.language.name === 'ja-Hrkt')?.name || species.names?.find(n => n.language.name === 'ja')?.name || '') : '';
-  const sprite = pokemon.sprites?.other?.['official-artwork']?.front_default || pokemon.sprites?.front_default || '';
-  const formLabel = getFormLabelFromName(pokemon.name, enName);
-  const card = {
-    id: 'poke-' + pokemon.id + '-' + Date.now(),
-    itemType: 'pokemon',
-    pokemonName: enName,
-    pokemonNameJP: jpName,
-    pokedexId: pokemon.id,
-    types: pokemon.types.map(t => t.type.name),
-    formLabel,
-    artworkUrl: sprite,
-    imageSmall: sprite,
-    cardName: enName + (formLabel ? ` (${formLabel})` : ''),
-    setName: formLabel || 'Placeholder',
-    collected: false,
-  };
-  if (b.cards.find(c => c.id === card.id || (c.itemType === 'pokemon' && c.pokedexId === pokemon.id && c.formLabel === formLabel))) {
-    toast(`Already in "${b.name}"`, 'err'); return;
-  }
-  addCardToBinder(binderId, card);
+  // No longer used — kept for safety
+  renderPokemonTab();
   renderSidebar();
   toast(`Added ${enName} to "${b.name}"!`);
 }
