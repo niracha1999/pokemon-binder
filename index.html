@@ -173,9 +173,28 @@
     .filter-chip:hover:not(.active) { border-color: var(--accent2); color: var(--accent2); }
 
     /* binder checklist grouping */
-    .group-toggle { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+    .group-toggle { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
     .group-toggle label { font-size: 0.82rem; color: var(--text-muted); }
     .group-toggle select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; color: var(--text); font-size: 0.82rem; }
+
+    /* Binder list view */
+    .binder-list-view .checklist-grid { display: flex; flex-direction: column; gap: 0; }
+    .binder-list-view .checklist-item { flex-direction: row; align-items: center; border-radius: 8px; padding: 8px 12px; gap: 12px; border-bottom: 1px solid var(--border); border-left: none; border-right: none; border-top: none; background: transparent; }
+    .binder-list-view .checklist-item:hover { background: var(--card); border-radius: 8px; }
+    .binder-list-view .checklist-item img { width: 44px; height: 44px; aspect-ratio: 1; object-fit: contain; border-radius: 4px; flex-shrink: 0; }
+    .binder-list-view .checklist-item > div:not(.remove-btn):not(.collected-overlay) { text-align: left; }
+    .binder-list-view .ci-pokemon { font-size: 0.85rem; }
+    .binder-list-view .ci-name { font-size: 0.75rem; }
+    .binder-list-view .collected-overlay { border-radius: 8px; }
+    .binder-list-view .checklist-item.collected { background: rgba(76,175,80,0.08); border-radius: 8px; }
+
+    /* Browse count badge */
+    #browse-count { font-size: 0.78rem; color: var(--text-muted); padding: 4px 0 10px; }
+
+    /* View toggle buttons */
+    .view-toggle { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+    .view-toggle button { background: transparent; border: none; padding: 5px 9px; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-size: 0.9rem; transition: all 0.12s; }
+    .view-toggle button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 
     .binder-rename-input { background: transparent; border: none; border-bottom: 1px solid var(--accent); color: var(--accent2); font-size: 1.3rem; font-weight: 700; outline: none; width: 200px; }
 
@@ -377,11 +396,10 @@
           <option value="totem">Totem</option>
         </select>
       </div>
+      <div id="browse-count"></div>
       <div id="browse-loading" class="tcg-loading" style="display:none"><div class="spinner"></div><div style="margin-top:8px">Loading Pokemon...</div></div>
       <div class="pokemon-grid" id="pokemon-grid"></div>
-      <div style="text-align:center;margin-top:20px">
-        <button class="btn-secondary" id="load-more-btn" onclick="loadMore()" style="display:none">Load More</button>
-      </div>
+      <div id="scroll-sentinel" style="height:1px"></div>
     </div>
 
     <!-- Binder Tab -->
@@ -645,6 +663,9 @@ let displayedPokemon = [];
 let offset = 0;
 const PAGE = 48;
 
+// ─── Binder view persistent state ────────────────────────────────────────────
+let binderViewState = { groupBy: 'none', sortBy: 'dex', viewMode: 'cards' };
+
 // ─── Generation ranges ───────────────────────────────────────────────────────
 const GEN_RANGES = {
   '1': [1, 151], '2': [152, 251], '3': [252, 386], '4': [387, 493],
@@ -792,6 +813,34 @@ function renderBinderView() {
   const done = b.cards.filter(c => c.collected).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
 
+  const { groupBy, sortBy, viewMode } = binderViewState;
+
+  const controlsHtml = `
+    <div class="group-toggle">
+      <label>Group:</label>
+      <select id="group-by" onchange="setBVS('groupBy',this.value)">
+        <option value="none" ${groupBy==='none'?'selected':''}>None</option>
+        <option value="pokemon" ${groupBy==='pokemon'?'selected':''}>Pokemon</option>
+        <option value="set" ${groupBy==='set'?'selected':''}>Set</option>
+      </select>
+      <label>Sort:</label>
+      <select class="sort-select" id="sort-by" onchange="setBVS('sortBy',this.value)">
+        <option value="dex" ${sortBy==='dex'?'selected':''}>Dex #</option>
+        <option value="name-az" ${sortBy==='name-az'?'selected':''}>Name A→Z</option>
+        <option value="name-za" ${sortBy==='name-za'?'selected':''}>Name Z→A</option>
+        <option value="type" ${sortBy==='type'?'selected':''}>Type</option>
+        <option value="set" ${sortBy==='set'?'selected':''}>Set Name</option>
+        <option value="collected-first" ${sortBy==='collected-first'?'selected':''}>Collected First</option>
+        <option value="uncollected-first" ${sortBy==='uncollected-first'?'selected':''}>Uncollected First</option>
+        <option value="added" ${sortBy==='added'?'selected':''}>Date Added</option>
+      </select>
+      <div class="view-toggle">
+        <button title="Card view" class="${viewMode==='cards'?'active':''}" onclick="setBVS('viewMode','cards')">⊞</button>
+        <button title="List view" class="${viewMode==='list'?'active':''}" onclick="setBVS('viewMode','list')">☰</button>
+      </div>
+      <button class="exp-chip-btn" onclick="resetBVS()" title="Reset to defaults">↺ Reset</button>
+    </div>`;
+
   if (total === 0) {
     el.innerHTML = `
       <div class="binder-header">
@@ -799,6 +848,7 @@ function renderBinderView() {
         <button class="btn-secondary btn-sm" onclick="openAutoSelectModal(${b.id})">🎯 Auto Select</button>
         <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">🗑 Delete</button>
       </div>
+      ${controlsHtml}
       <div class="binder-empty">
         <div style="font-size:3rem">🃏</div>
         <p>This binder is empty. Use <strong>Auto Select</strong> to bulk-add Pokemon, or browse and add them individually.</p>
@@ -807,77 +857,70 @@ function renderBinderView() {
     return;
   }
 
-  // Group options
-  const groups = groupCards(b.cards, 'pokemon');
-
   el.innerHTML = `
     <div class="binder-header">
       <h2>${b.name}</h2>
-      <div class="progress-bar-wrap" style="max-width:200px"><div class="progress-bar" style="width:${pct}%"></div></div>
+      <div class="progress-bar-wrap" style="max-width:180px"><div class="progress-bar" style="width:${pct}%"></div></div>
       <span class="progress-label">${done} / ${total} (${pct}%)</span>
       <button class="btn-secondary btn-sm" onclick="openAutoSelectModal(${b.id})">🎯 Auto Select</button>
       <button class="btn-secondary btn-sm" onclick="openExportModal(${b.id})">📄 Export PDF</button>
       <button class="btn-secondary btn-sm" onclick="deleteBinder(${b.id})">🗑 Delete</button>
     </div>
-    <div class="group-toggle">
-      <label>Group by:</label>
-      <select id="group-by">
-        <option value="pokemon">Pokemon</option>
-        <option value="set">Set</option>
-        <option value="none">None</option>
-      </select>
-      <label style="margin-left:10px">Sort by:</label>
-      <select class="sort-select" id="sort-by">
-        <option value="added">Date Added</option>
-        <option value="name-az">Name A→Z</option>
-        <option value="name-za">Name Z→A</option>
-        <option value="dex">Dex #</option>
-        <option value="type">Type</option>
-        <option value="collected-first">Collected First</option>
-        <option value="uncollected-first">Uncollected First</option>
-        <option value="set">Set Name</option>
-      </select>
-    </div>
+    ${controlsHtml}
     <div id="binder-cards-wrap"></div>`;
 
-  // Re-render cards with selected grouping
-  const groupBy = document.getElementById('group-by')?.value || 'pokemon';
-  renderBinderCards(b, groupBy);
+  renderBinderCards(b);
 }
 
-function renderBinderCards(b, groupBy, sortBy) {
+// Save a binder view state key and re-render the cards portion only
+function setBVS(key, value) {
+  binderViewState[key] = value;
+  const b = getBinder(activeBinder);
+  if (b) renderBinderCards(b);
+  // Sync view toggle button styles
+  document.querySelectorAll('.view-toggle button').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && binderViewState.viewMode === 'cards') || (i === 1 && binderViewState.viewMode === 'list'));
+  });
+}
+
+function resetBVS() {
+  binderViewState = { groupBy: 'none', sortBy: 'dex', viewMode: 'cards' };
+  renderBinderView();
+}
+
+function renderBinderCards(b) {
   const wrap = document.getElementById('binder-cards-wrap');
   if (!wrap) return;
+  const { groupBy, sortBy, viewMode } = binderViewState;
 
-  // Sort cards before grouping
-  const sorted = sortCards([...b.cards], sortBy || 'added');
+  const sorted = sortCards([...b.cards], sortBy);
   const grouped = groupCards(sorted, groupBy);
+  const isList = viewMode === 'list';
 
+  wrap.className = isList ? 'binder-list-view' : '';
   wrap.innerHTML = Object.entries(grouped).map(([group, cards]) => `
     <div class="binder-section">
-      ${group !== '_all' ? `<div class="binder-section-title">${group}</div>` : ''}
+      ${group !== '_all' ? `<div class="binder-section-title">${group} <span style="font-size:0.72rem;opacity:0.6">(${cards.length})</span></div>` : ''}
       <div class="checklist-grid">
         ${cards.map(c => {
           const safeId = c.id.replace(/'/g, "\\'");
+          const img = c.imageSmall
+            ? `<img src="${c.imageSmall}" alt="${(c.cardName||'').replace(/"/g,'')}" loading="lazy" />`
+            : `<div style="${isList?'width:44px;height:44px':'width:100%;aspect-ratio:2.5/3.5'};background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:${isList?'1.2':'2'}rem">🃏</div>`;
           return `<div class="checklist-item ${c.collected ? 'collected' : ''}" onclick="toggleCollected(${b.id}, '${safeId}')">
-            <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinder(${b.id}, '${safeId}')" title="Remove from binder">✕</button>
-            ${c.imageSmall ? `<img src="${c.imageSmall}" alt="${c.cardName || ''}" loading="lazy" />` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
-            <div class="ci-pokemon">${c.pokemonName || ''}</div>
-            <div class="ci-name">${c.cardName || ''}</div>
-            <div class="ci-set">${c.setName || ''}</div>
-            ${c.formLabel ? `<div style="margin-top:2px"><span class="form-badge" style="font-size:0.58rem">${c.formLabel}</span></div>` : ''}
+            <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinder(${b.id}, '${safeId}')" title="Remove">✕</button>
+            ${img}
+            <div style="flex:1;min-width:0">
+              <div class="ci-pokemon">${c.pokemonName || ''}</div>
+              <div class="ci-name">${c.cardName || ''}</div>
+              <div class="ci-set">${c.setName || ''}</div>
+              ${c.formLabel ? `<span class="form-badge" style="font-size:0.58rem">${c.formLabel}</span>` : ''}
+            </div>
             ${c.collected ? `<div class="collected-overlay"><span>✓</span></div>` : ''}
           </div>`;
         }).join('')}
       </div>
     </div>`).join('');
-
-  // Wire up group-by + sort-by handlers
-  const groupSel = document.getElementById('group-by');
-  const sortSel = document.getElementById('sort-by');
-  const rerender = () => renderBinderCards(b, groupSel?.value || 'pokemon', sortSel?.value || 'added');
-  if (groupSel) groupSel.onchange = rerender;
-  if (sortSel) sortSel.onchange = rerender;
 }
 
 function sortCards(cards, by) {
@@ -952,14 +995,28 @@ async function loadPokemon() {
   await fetchAndRenderPokemon(true);
 }
 
-async function loadMore() {
-  await fetchAndRenderPokemon(false);
+// ─── Infinite scroll setup ────────────────────────────────────────────────────
+let scrollObserver = null;
+let isLoadingMore = false;
+
+function setupInfiniteScroll() {
+  if (scrollObserver) scrollObserver.disconnect();
+  const sentinel = document.getElementById('scroll-sentinel');
+  if (!sentinel) return;
+  scrollObserver = new IntersectionObserver(async entries => {
+    if (entries[0].isIntersecting && !isLoadingMore) {
+      isLoadingMore = true;
+      await fetchAndRenderPokemon(false);
+      isLoadingMore = false;
+    }
+  }, { rootMargin: '200px' });
+  scrollObserver.observe(sentinel);
 }
 
 async function fetchAndRenderPokemon(reset) {
   const loading = document.getElementById('browse-loading');
   const grid = document.getElementById('pokemon-grid');
-  const btn = document.getElementById('load-more-btn');
+  const countEl = document.getElementById('browse-count');
   const search = document.getElementById('search-input').value.trim().toLowerCase();
   const genFilter = document.getElementById('gen-filter').value;
   const typeFilter = document.getElementById('type-filter').value;
@@ -969,7 +1026,6 @@ async function fetchAndRenderPokemon(reset) {
   const myGen = loadGeneration;
 
   loading.style.display = 'block';
-  btn.style.display = 'none';
 
   // Disable gen filter when a form is selected (forms span generations)
   const genSelect = document.getElementById('gen-filter');
@@ -1021,8 +1077,12 @@ async function fetchAndRenderPokemon(reset) {
 
     if (myGen !== loadGeneration) { loading.style.display = 'none'; return; }
 
+    // Update count label
+    if (countEl && reset) countEl.textContent = `${filtered.length} Pokémon`;
+
     if (page.length === 0 && reset) {
       grid.innerHTML = '<div class="tcg-empty">No Pokemon found for this filter.</div>';
+      if (countEl) countEl.textContent = '0 Pokémon';
       loading.style.display = 'none';
       return;
     }
@@ -1079,7 +1139,9 @@ async function fetchAndRenderPokemon(reset) {
       grid.appendChild(card);
     }
 
-    btn.style.display = (offset < filtered.length) ? 'inline-block' : 'none';
+    // Stop observing sentinel when all loaded
+    if (offset >= filtered.length && scrollObserver) scrollObserver.disconnect();
+    else if (reset) setupInfiniteScroll();
   } catch (e) {
     console.error(e);
     grid.innerHTML += '<div class="tcg-empty" style="color:var(--accent)">Failed to load Pokemon. Check your connection.</div>';
