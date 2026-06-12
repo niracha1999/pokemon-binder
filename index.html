@@ -230,6 +230,10 @@
     .binder-list-view .collected-overlay { border-radius: 10px; }
     .binder-list-view .checklist-item.collected { background: rgba(61,173,110,0.07); border-radius: 10px; }
 
+    /* ── Binder collected state on pokemon-card style ─────────────────────── */
+    .binder-collected { border-color: var(--success) !important; background: rgba(61,173,110,0.07) !important; }
+    .binder-collected:hover { border-color: var(--success) !important; box-shadow: 0 5px 16px rgba(61,173,110,0.2) !important; }
+
     /* ── Browse count ──────────────────────────────────────────────────────── */
     #browse-count { font-size: 0.78rem; color: var(--text-muted); padding: 2px 0 12px; font-weight: 600; }
 
@@ -539,6 +543,33 @@
                 <option value="3x3">3 × 3 (9 cards)</option>
                 <option value="3x4">3 × 4 (12 cards)</option>
               </select>
+            </div>
+          </div>
+          <!-- Resize controls -->
+          <div class="export-settings-grid" style="margin-bottom:8px">
+            <div class="export-setting">
+              <label>Card Size <span id="exp-scale-val" style="color:var(--accent2)">100%</span></label>
+              <input type="range" id="exp-scale" min="60" max="140" value="100" step="5"
+                style="accent-color:var(--accent2);width:100%"
+                oninput="document.getElementById('exp-scale-val').textContent=this.value+'%'" />
+            </div>
+            <div class="export-setting">
+              <label>Card Gap <span id="exp-gap-val" style="color:var(--accent2)">7mm</span></label>
+              <input type="range" id="exp-gap" min="0" max="15" value="7" step="1"
+                style="accent-color:var(--accent2);width:100%"
+                oninput="document.getElementById('exp-gap-val').textContent=this.value+'mm'" />
+            </div>
+            <div class="export-setting">
+              <label>Columns <span id="exp-cols-val" style="color:var(--accent2)">3</span></label>
+              <input type="range" id="exp-cols" min="2" max="5" value="3" step="1"
+                style="accent-color:var(--accent2);width:100%"
+                oninput="document.getElementById('exp-cols-val').textContent=this.value" />
+            </div>
+            <div class="export-setting">
+              <label>Rows <span id="exp-rows-val" style="color:var(--accent2)">3</span></label>
+              <input type="range" id="exp-rows" min="2" max="6" value="3" step="1"
+                style="accent-color:var(--accent2);width:100%"
+                oninput="document.getElementById('exp-rows-val').textContent=this.value" />
             </div>
           </div>
           <div class="export-toggles">
@@ -859,6 +890,7 @@ function renderBinderView() {
         <option value="none" ${groupBy==='none'?'selected':''}>None</option>
         <option value="pokemon" ${groupBy==='pokemon'?'selected':''}>Pokemon</option>
         <option value="set" ${groupBy==='set'?'selected':''}>Set</option>
+        <option value="collected" ${groupBy==='collected'?'selected':''}>Collected / Uncollected</option>
       </select>
       <label>Sort:</label>
       <select class="sort-select" id="sort-by" onchange="setBVS('sortBy',this.value)">
@@ -938,26 +970,67 @@ function renderBinderCards(b) {
   wrap.innerHTML = Object.entries(grouped).map(([group, cards]) => `
     <div class="binder-section">
       ${group !== '_all' ? `<div class="binder-section-title">${group} <span style="font-size:0.72rem;opacity:0.6">(${cards.length})</span></div>` : ''}
-      <div class="checklist-grid">
+      <div class="${isList ? 'checklist-grid' : 'pokemon-grid'}">
         ${cards.map(c => {
-          const safeId = c.id.replace(/'/g, "\\'");
-          const img = c.imageSmall
-            ? `<img src="${c.imageSmall}" alt="${(c.cardName||'').replace(/"/g,'')}" loading="lazy" />`
-            : `<div style="${isList?'width:44px;height:44px':'width:100%;aspect-ratio:2.5/3.5'};background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:${isList?'1.2':'2'}rem">🃏</div>`;
-          return `<div class="checklist-item ${c.collected ? 'collected' : ''}" onclick="toggleCollected(${b.id}, '${safeId}')">
-            <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinder(${b.id}, '${safeId}')" title="Remove">✕</button>
-            ${img}
-            <div style="flex:1;min-width:0">
-              <div class="ci-pokemon">${c.pokemonName || ''}</div>
-              <div class="ci-name">${c.cardName || ''}</div>
-              <div class="ci-set">${c.setName || ''}</div>
-              ${c.formLabel ? `<span class="form-badge" style="font-size:0.58rem">${c.formLabel}</span>` : ''}
-            </div>
-            ${c.collected ? `<div class="collected-overlay"><span>✓</span></div>` : ''}
+          const cardId = JSON.stringify(c.id); // safe JSON for onclick
+          const isPokeType = c.itemType === 'pokemon';
+          const imgSrc = c.imageSmall || c.artworkUrl || '';
+          const dexStr = c.pokedexId ? `#${String(c.pokedexId).padStart(4,'0')}` : '';
+          const typesHtml = (c.types||[]).map(t => `<span class="type-badge t-${t}">${t}</span>`).join('');
+
+          if (isList) {
+            return `<div class="checklist-item ${c.collected?'collected':''}" onclick="toggleCollectedById(${b.id}, ${cardId})">
+              <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinderById(${b.id}, ${cardId})" title="Remove">✕</button>
+              ${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" style="width:44px;height:44px;object-fit:contain;border-radius:4px;flex-shrink:0" />` : `<div style="width:44px;height:44px;background:var(--card);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🃏</div>`}
+              <div style="flex:1;min-width:0">
+                ${dexStr ? `<div class="pnum" style="text-align:left">${dexStr}</div>` : ''}
+                <div class="pname" style="text-align:left;font-size:0.82rem">${c.pokemonName||c.cardName||''}</div>
+                ${c.pokemonNameJP ? `<div class="pname-jp" style="text-align:left">${c.pokemonNameJP}</div>` : ''}
+                ${c.formLabel ? `<span class="form-badge" style="font-size:0.58rem">${c.formLabel}</span>` : ''}
+                <div class="type-badges" style="justify-content:flex-start;margin-top:3px">${typesHtml}</div>
+              </div>
+              ${c.collected ? `<div class="collected-overlay"><span>✓</span></div>` : ''}
+            </div>`;
+          }
+
+          // Card view — matches browse pokemon style
+          return `<div class="pokemon-card ${c.collected?'binder-collected':''}" onclick="toggleCollectedById(${b.id}, ${cardId})" style="position:relative">
+            <button class="remove-btn" style="opacity:0" onclick="event.stopPropagation();removeCardFromBinderById(${b.id}, ${cardId})" title="Remove">✕</button>
+            ${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" style="width:100%;max-width:110px;height:110px;object-fit:contain" />` : `<div style="width:88px;height:88px;background:var(--card);border-radius:8px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
+            ${dexStr ? `<div class="pnum">${dexStr}</div>` : ''}
+            <div class="pname">${c.pokemonName || c.cardName || ''}</div>
+            ${c.pokemonNameJP ? `<div class="pname-jp">${c.pokemonNameJP}</div>` : ''}
+            ${c.setName && !isPokeType ? `<div class="pname-jp">${c.setName}</div>` : ''}
+            ${c.formLabel ? `<div style="margin-top:3px"><span class="form-badge">${c.formLabel}</span></div>` : ''}
+            <div class="type-badges">${typesHtml}</div>
+            ${c.collected ? `<div style="position:absolute;inset:0;border-radius:14px;background:rgba(61,173,110,0.18);display:flex;align-items:center;justify-content:center;pointer-events:none"><span style="font-size:2.5rem">✓</span></div>` : ''}
           </div>`;
         }).join('')}
       </div>
     </div>`).join('');
+
+  // Show remove btn on card-view hover
+  wrap.querySelectorAll('.pokemon-card .remove-btn').forEach(btn => {
+    const card = btn.closest('.pokemon-card');
+    card.addEventListener('mouseenter', () => btn.style.opacity = '1');
+    card.addEventListener('mouseleave', () => btn.style.opacity = '0');
+  });
+}
+
+// Safe ID-based toggle/remove (avoids string escaping in onclick)
+function toggleCollectedById(binderId, cardId) {
+  const b = getBinder(binderId);
+  if (!b) return;
+  const c = b.cards.find(c => c.id === cardId);
+  if (c) { c.collected = !c.collected; save(); renderBinderCards(b); }
+}
+
+function removeCardFromBinderById(binderId, cardId) {
+  const b = getBinder(binderId);
+  if (!b) return;
+  b.cards = b.cards.filter(c => c.id !== cardId);
+  save();
+  renderBinderView();
 }
 
 function sortCards(cards, by) {
@@ -975,13 +1048,15 @@ function sortCards(cards, by) {
 
 function groupCards(cards, by) {
   if (by === 'none') return { _all: cards };
+  if (by === 'collected') {
+    return { '✓ Collected': cards.filter(c => c.collected), '○ Uncollected': cards.filter(c => !c.collected) };
+  }
   const groups = {};
   for (const c of cards) {
     const key = by === 'pokemon' ? (c.pokemonName || 'Unknown') : (c.setName || 'Unknown Set');
     if (!groups[key]) groups[key] = [];
     groups[key].push(c);
   }
-  // Sort keys
   return Object.fromEntries(Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)));
 }
 
@@ -1277,6 +1352,8 @@ function getModalBinderId() {
 }
 
 // ─── Pokemon tab: all variants with artwork + Add button ──────────────────────
+const variantRegistry = {}; // key → { pokemonId, formLabel, displayName, sprite, jpName, types }
+
 async function renderPokemonTab() {
   const content = document.getElementById('modal-tab-content');
   if (!content || !currentPokemon) return;
@@ -1287,7 +1364,7 @@ async function renderPokemonTab() {
     variantApiNames.map(name => fetch(`https://pokeapi.co/api/v2/pokemon/${name}`).then(r => r.json()).catch(() => null))
   );
 
-  let html = `<div class="tcg-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">`;
+  let html = `<div class="pokemon-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">`;
   for (let i = 0; i < variantDetails.length; i++) {
     if (variantDetails[i].status !== 'fulfilled' || !variantDetails[i].value) continue;
     const vd = variantDetails[i].value;
@@ -1298,20 +1375,28 @@ async function renderPokemonTab() {
     const suffix = vd.name !== pokemon.name ? vd.name.replace(pokemon.name + '-', '').replace(/-/g,' ') : '';
     const displayName = i === 0 ? enName : (formLabel ? `${enName} (${formLabel})` : `${enName} (${suffix})`);
     const types = vd.types.map(t => t.type.name);
-    const safeDisplay = displayName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const safeSprite = sprite.replace(/'/g,"\\'");
-    const safeJP = (jpName||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const regKey = `v-${vd.id}-${formLabel||'base'}`;
 
-    html += `<div class="tcg-card" id="variant-${vd.id}-${formLabel||'base'}" onclick="addVariantToBinder(${vd.id},'${formLabel}','${safeDisplay}','${safeSprite}','${safeJP}',${JSON.stringify(types)})">
-      ${sprite ? `<img src="${sprite}" alt="${displayName}" loading="lazy" />` : `<div style="aspect-ratio:2.5/3.5;background:var(--card);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem">❓</div>`}
-      <div class="tcg-name" style="font-weight:600">${displayName}</div>
-      ${formLabel ? `<div style="margin:3px 0"><span class="form-badge">${formLabel}</span></div>` : ''}
-      <div class="tcg-set">${types.map(t=>`<span class="type-badge t-${t}" style="font-size:0.6rem">${t}</span>`).join(' ')}</div>
+    // Store in registry to avoid any string escaping issues
+    variantRegistry[regKey] = { pokemonId: vd.id, formLabel, displayName, sprite, jpName: jpName||'', types };
+
+    html += `<div class="pokemon-card" id="variant-${vd.id}-${formLabel||'base'}" onclick="addVariantFromRegistry('${regKey}')">
+      ${sprite ? `<img src="${sprite}" alt="" loading="lazy" style="width:88px;height:88px;object-fit:contain" />` : `<div style="width:88px;height:88px;background:var(--card);border-radius:8px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:2rem">❓</div>`}
+      <div class="pnum">#${String(vd.id).padStart(4,'0')}</div>
+      <div class="pname">${displayName}</div>
+      ${jpName ? `<div class="pname-jp">${jpName}</div>` : ''}
+      ${formLabel ? `<div style="margin-top:4px"><span class="form-badge">${formLabel}</span></div>` : ''}
+      <div class="type-badges">${types.map(t=>`<span class="type-badge t-${t}">${t}</span>`).join('')}</div>
     </div>`;
   }
   html += '</div>';
   content.innerHTML = html;
   refreshVariantInBinderState();
+}
+
+function addVariantFromRegistry(regKey) {
+  const v = variantRegistry[regKey];
+  if (v) addVariantToBinder(v.pokemonId, v.formLabel, v.displayName, v.sprite, v.jpName, v.types);
 }
 
 function refreshVariantInBinderState() {
@@ -1989,7 +2074,7 @@ function updateExportCount() {
 }
 
 // ─── PDF Generation ───────────────────────────────────────────────────────────
-const imgCache = new Map();
+const imgCache = new Map(); // url → { dataUrl, w, h }
 
 async function loadImageAsDataURL(url) {
   if (!url) return null;
@@ -2003,9 +2088,10 @@ async function loadImageAsDataURL(url) {
         canvas.width = img.naturalWidth || img.width;
         canvas.height = img.naturalHeight || img.height;
         canvas.getContext('2d').drawImage(img, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        imgCache.set(url, dataUrl);
-        resolve(dataUrl);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const entry = { dataUrl, w: canvas.width, h: canvas.height };
+        imgCache.set(url, entry);
+        resolve(entry);
       } catch { resolve(null); }
     };
     img.onerror = () => resolve(null);
@@ -2016,25 +2102,37 @@ async function loadImageAsDataURL(url) {
 async function generateBinderPDF() {
   if (exportState.items.length === 0) { toast('Add items to export list first', 'err'); return; }
 
-  const pageSize = document.getElementById('exp-page-size').value; // 'a4' | 'letter'
-  const layout = document.getElementById('exp-layout').value;      // '3x3' | '3x4'
+  const pageSize = document.getElementById('exp-page-size').value;
   const showJP = document.getElementById('exp-show-jpname').checked;
   const showTypes = document.getElementById('exp-show-types').checked;
   const showForm = document.getElementById('exp-show-form').checked;
   const showSet = document.getElementById('exp-show-set').checked;
   const showCB = document.getElementById('exp-show-checkbox').checked;
 
+  // Read slider values
+  const scalePct = parseInt(document.getElementById('exp-scale').value) / 100;
+  const userGap  = parseInt(document.getElementById('exp-gap').value);
+  const cols     = parseInt(document.getElementById('exp-cols').value);
+  const rows     = parseInt(document.getElementById('exp-rows').value);
+
   // Layout math (all in mm)
-  const cols = 3;
-  const rows = layout === '3x3' ? 3 : 4;
   const pageW = pageSize === 'a4' ? 210 : 215.9;
   const pageH = pageSize === 'a4' ? 297 : 279.4;
-  const hGap = 7, vGap = layout === '3x3' ? 9 : 5;
-  const hMargin = 13, vMargin = layout === '3x3' ? 12 : 8;
-  const cardW = (pageW - hMargin * 2 - hGap * (cols - 1)) / cols;  // ~56mm for A4
+  const hGap = userGap, vGap = userGap;
+  const hMargin = 10, vMargin = 10;
+
+  // Base card width from page, then apply scale
+  const baseCardW = (pageW - hMargin * 2 - hGap * (cols - 1)) / cols;
+  const cardW = baseCardW * scalePct;
   const labelH = (showJP ? 4.5 : 0) + (showTypes ? 4 : 0) + (showForm ? 3.5 : 0) + (showSet ? 3.5 : 0) + (showCB ? 5 : 0) + 5;
-  const cardImgH = cardW * (88 / 63); // standard card ratio
+  const cardImgH = cardW * (88 / 63); // standard TCG card ratio slot
   const cellH = cardImgH + labelH;
+
+  // Centre grid on page
+  const gridW = cols * cardW + (cols - 1) * hGap;
+  const gridH = rows * cellH + (rows - 1) * vGap;
+  const startX = (pageW - gridW) / 2;
+  const startY = (pageH - gridH) / 2;
 
   const total = exportState.items.length;
   const perPage = cols * rows;
@@ -2048,12 +2146,12 @@ async function generateBinderPDF() {
   msg.textContent = 'Loading images...';
   prog.style.width = '0%';
 
-  // Pre-load all images
+  // Pre-load all images (returns { dataUrl, w, h } or null)
   const imageUrls = exportState.items.map(i => i.tcgImageUrl || i.artworkUrl || '');
   const imageData = [];
   for (let i = 0; i < imageUrls.length; i++) {
-    const dataUrl = await loadImageAsDataURL(imageUrls[i]);
-    imageData.push(dataUrl);
+    const entry = await loadImageAsDataURL(imageUrls[i]);
+    imageData.push(entry); // entry may be null
     prog.style.width = Math.round(((i + 1) / imageUrls.length) * 50) + '%';
   }
 
@@ -2076,23 +2174,33 @@ async function generateBinderPDF() {
       const item = pageItems[ci];
       const col = ci % cols;
       const row = Math.floor(ci / cols);
-      const x = hMargin + col * (cardW + hGap);
-      const y = vMargin + row * (cellH + vGap);
+      const x = startX + col * (cardW + hGap);
+      const y = startY + row * (cellH + vGap);
 
-      // Card image area
-      doc.setDrawColor(60, 70, 100);
-      doc.setLineWidth(0.4);
-      doc.roundedRect(x, y, cardW, cardImgH, 2, 2, 'S');
+      // Card slot border (light teal)
+      doc.setDrawColor(58, 144, 153);
+      doc.setFillColor(242, 249, 253);
+      doc.setLineWidth(0.35);
+      doc.roundedRect(x, y, cardW, cardImgH, 2, 2, 'FD');
 
-      const imgDataUrl = imageData[p * perPage + ci];
-      if (imgDataUrl) {
-        try { doc.addImage(imgDataUrl, 'JPEG', x + 0.5, y + 0.5, cardW - 1, cardImgH - 1); } catch {}
+      const imgEntry = imageData[p * perPage + ci];
+      if (imgEntry && imgEntry.dataUrl) {
+        try {
+          // Aspect-ratio-contained fit — image never exceeds slot bounds
+          const slotW = cardW - 2, slotH = cardImgH - 2;
+          const natW = imgEntry.w || 1, natH = imgEntry.h || 1;
+          const natRatio = natW / natH;
+          const slotRatio = slotW / slotH;
+          let drawW, drawH;
+          if (natRatio > slotRatio) { drawW = slotW; drawH = slotW / natRatio; }
+          else { drawH = slotH; drawW = slotH * natRatio; }
+          const imgX = x + 1 + (slotW - drawW) / 2;
+          const imgY = y + 1 + (slotH - drawH) / 2;
+          doc.addImage(imgEntry.dataUrl, 'JPEG', imgX, imgY, drawW, drawH);
+        } catch {}
       } else {
-        // Fallback placeholder
-        doc.setFillColor(20, 30, 60);
-        doc.roundedRect(x + 0.5, y + 0.5, cardW - 1, cardImgH - 1, 2, 2, 'F');
-        doc.setTextColor(120, 140, 180);
-        doc.setFontSize(7);
+        doc.setTextColor(90, 140, 154);
+        doc.setFontSize(6);
         doc.text('No Image', x + cardW / 2, y + cardImgH / 2, { align: 'center', baseline: 'middle' });
       }
 
