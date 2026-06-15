@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#3A9099">
   <title>Pokemon Binder Checklist</title>
   <link rel="icon" type="image/png" href="icon.png" />
   <link rel="apple-touch-icon" href="icon.png" />
@@ -190,8 +193,35 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-    /* ── Responsive ────────────────────────────────────────────────────────── */
-    @media (max-width: 700px) { #app { grid-template-columns: 1fr; } aside { max-height: none; } }
+    /* ── Mobile / iOS ──────────────────────────────────────────────────────────── */
+    #mobile-menu-btn { display: none; }
+    @media (max-width: 768px) {
+      #mobile-menu-btn { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: none; background: var(--card); border-radius: 10px; cursor: pointer; font-size: 1.3rem; color: var(--text); margin-right: 8px; flex-shrink: 0; }
+      #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      aside {
+        position: fixed; top: 0; left: -280px; width: 280px; height: 100dvh;
+        z-index: 200; background: var(--surface); border-right: 1px solid var(--border);
+        box-shadow: 4px 0 20px rgba(0,0,0,0.15); transition: left 0.28s ease;
+        overflow-y: auto; padding-bottom: 24px;
+      }
+      aside.mobile-open { left: 0; }
+      #sidebar-overlay { display: block; }
+      #sidebar-overlay.active { opacity: 1; pointer-events: auto; }
+      main { min-height: 100dvh; }
+      .app-header { padding: 10px 12px; gap: 8px; }
+      .modal { max-width: 98vw; max-height: 96dvh; }
+      .modal-body { max-height: 60dvh !important; }
+      .export-modal .modal-body { flex-direction: column; }
+      .export-left, .export-right { width: 100% !important; max-height: 240px; overflow-y: auto; }
+      .pokemon-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important; }
+      .tab-bar { gap: 2px; }
+      .tab-btn { font-size: 0.72rem; padding: 6px 8px; }
+      .pokemon-card { min-width: 90px; }
+      .binder-card { min-width: 0; }
+      button, .btn-primary, .btn-secondary, .tab-btn, .as-chip { min-height: 40px; }
+      .export-modal { max-height: 98dvh; }
+    }
+    #sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 199; opacity: 0; pointer-events: none; transition: opacity 0.28s; }
 
     /* ── No binder ─────────────────────────────────────────────────────────── */
     .no-binder { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; color: var(--text-muted); gap: 10px; }
@@ -368,6 +398,7 @@
 
 <div id="app">
   <header>
+    <button id="mobile-menu-btn" onclick="toggleMobileSidebar()" aria-label="Menu">☰</button>
     <img src="icon.png" alt="icon" style="width:38px;height:38px;object-fit:contain;border-radius:10px" />
     <h1>Pokemon <span>Binder</span> Checklist</h1>
     <div style="flex:1"></div>
@@ -379,6 +410,7 @@
     </div>
   </header>
 
+<div id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
   <aside>
     <div class="sidebar-title">My Binders</div>
     <ul class="binder-list" id="binder-list"></ul>
@@ -551,25 +583,25 @@
               <label>Card Size <span id="exp-scale-val" style="color:var(--accent2)">100%</span></label>
               <input type="range" id="exp-scale" min="60" max="140" value="100" step="5"
                 style="accent-color:var(--accent2);width:100%"
-                oninput="document.getElementById('exp-scale-val').textContent=this.value+'%'" />
+                oninput="document.getElementById('exp-scale-val').textContent=this.value+'%';renderPrintPreview()" />
             </div>
             <div class="export-setting">
               <label>Card Gap <span id="exp-gap-val" style="color:var(--accent2)">7mm</span></label>
               <input type="range" id="exp-gap" min="0" max="15" value="7" step="1"
                 style="accent-color:var(--accent2);width:100%"
-                oninput="document.getElementById('exp-gap-val').textContent=this.value+'mm'" />
+                oninput="document.getElementById('exp-gap-val').textContent=this.value+'mm';renderPrintPreview()" />
             </div>
             <div class="export-setting">
               <label>Columns <span id="exp-cols-val" style="color:var(--accent2)">3</span></label>
               <input type="range" id="exp-cols" min="2" max="5" value="3" step="1"
                 style="accent-color:var(--accent2);width:100%"
-                oninput="document.getElementById('exp-cols-val').textContent=this.value" />
+                oninput="document.getElementById('exp-cols-val').textContent=this.value;renderPrintPreview()" />
             </div>
             <div class="export-setting">
               <label>Rows <span id="exp-rows-val" style="color:var(--accent2)">3</span></label>
               <input type="range" id="exp-rows" min="2" max="6" value="3" step="1"
                 style="accent-color:var(--accent2);width:100%"
-                oninput="document.getElementById('exp-rows-val').textContent=this.value" />
+                oninput="document.getElementById('exp-rows-val').textContent=this.value;renderPrintPreview()" />
             </div>
           </div>
           <div class="export-toggles">
@@ -584,8 +616,13 @@
 
     </div>
 
+    <div id="print-preview-wrap" style="display:none;padding:10px 18px;border-top:1px solid var(--border);background:var(--card);overflow-x:auto">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Print Preview</div>
+      <canvas id="print-preview-canvas" style="border:1px solid var(--border);border-radius:6px;max-width:100%;display:block;margin:0 auto"></canvas>
+    </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+      <button class="btn-secondary" id="preview-pdf-btn" onclick="togglePrintPreview()">🔍 Preview</button>
       <button class="btn-primary" onclick="generateBinderPDF()">📄 Download PDF</button>
     </div>
   </div>
@@ -816,6 +853,7 @@ function renameBinder(id, newName) {
 }
 
 function selectBinder(id) {
+  closeMobileSidebar();
   activeBinder = id;
   renderSidebar();
   renderBinderView();
@@ -972,15 +1010,14 @@ function renderBinderCards(b) {
       ${group !== '_all' ? `<div class="binder-section-title">${group} <span style="font-size:0.72rem;opacity:0.6">(${cards.length})</span></div>` : ''}
       <div class="${isList ? 'checklist-grid' : 'pokemon-grid'}">
         ${cards.map(c => {
-          const cardId = JSON.stringify(c.id); // safe JSON for onclick
           const isPokeType = c.itemType === 'pokemon';
           const imgSrc = c.imageSmall || c.artworkUrl || '';
           const dexStr = c.pokedexId ? `#${String(c.pokedexId).padStart(4,'0')}` : '';
           const typesHtml = (c.types||[]).map(t => `<span class="type-badge t-${t}">${t}</span>`).join('');
 
           if (isList) {
-            return `<div class="checklist-item ${c.collected?'collected':''}" onclick="toggleCollectedById(${b.id}, ${cardId})">
-              <button class="remove-btn" onclick="event.stopPropagation();removeCardFromBinderById(${b.id}, ${cardId})" title="Remove">✕</button>
+            return `<div class="checklist-item ${c.collected?'collected':''}" data-bid="${b.id}" data-cid="${c.id.replace(/"/g,'&quot;')}">
+              <button class="remove-btn" data-remove="1" onclick="event.stopPropagation()" title="Remove">✕</button>
               ${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" style="width:44px;height:44px;object-fit:contain;border-radius:4px;flex-shrink:0" />` : `<div style="width:44px;height:44px;background:var(--card);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🃏</div>`}
               <div style="flex:1;min-width:0">
                 ${dexStr ? `<div class="pnum" style="text-align:left">${dexStr}</div>` : ''}
@@ -994,8 +1031,8 @@ function renderBinderCards(b) {
           }
 
           // Card view — matches browse pokemon style
-          return `<div class="pokemon-card ${c.collected?'binder-collected':''}" onclick="toggleCollectedById(${b.id}, ${cardId})" style="position:relative">
-            <button class="remove-btn" style="opacity:0" onclick="event.stopPropagation();removeCardFromBinderById(${b.id}, ${cardId})" title="Remove">✕</button>
+          return `<div class="pokemon-card ${c.collected?'binder-collected':''}" data-bid="${b.id}" data-cid="${c.id.replace(/"/g,'&quot;')}" style="position:relative">
+            <button class="remove-btn" data-remove="1" style="opacity:0" onclick="event.stopPropagation()" title="Remove">✕</button>
             ${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" style="width:100%;max-width:110px;height:110px;object-fit:contain" />` : `<div style="width:88px;height:88px;background:var(--card);border-radius:8px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:2rem">🃏</div>`}
             ${dexStr ? `<div class="pnum">${dexStr}</div>` : ''}
             <div class="pname">${c.pokemonName || c.cardName || ''}</div>
@@ -1015,6 +1052,17 @@ function renderBinderCards(b) {
     card.addEventListener('mouseenter', () => btn.style.opacity = '1');
     card.addEventListener('mouseleave', () => btn.style.opacity = '0');
   });
+
+  // Event delegation for toggle/remove (avoids inline onclick escaping issues)
+  wrap.addEventListener('click', e => {
+    const removeBtn = e.target.closest('[data-remove]');
+    const card = e.target.closest('[data-bid]');
+    if (!card) return;
+    const bid = Number(card.dataset.bid);
+    const cid = card.dataset.cid;
+    if (removeBtn) { e.stopPropagation(); removeCardFromBinderById(bid, cid); return; }
+    toggleCollectedById(bid, cid);
+  }, { capture: false });
 }
 
 // Safe ID-based toggle/remove (avoids string escaping in onclick)
@@ -1759,6 +1807,97 @@ function openExportModal(binderId) {
   updateExportCount();
   // Auto-search to populate results with gen-filtered list
   runExportSearch();
+}
+
+function toggleMobileSidebar() {
+  document.querySelector('aside').classList.toggle('mobile-open');
+  document.getElementById('sidebar-overlay').classList.toggle('active');
+}
+function closeMobileSidebar() {
+  document.querySelector('aside').classList.remove('mobile-open');
+  document.getElementById('sidebar-overlay').classList.remove('active');
+}
+
+let previewVisible = false;
+function togglePrintPreview() {
+  previewVisible = !previewVisible;
+  document.getElementById('print-preview-wrap').style.display = previewVisible ? 'block' : 'none';
+  document.getElementById('preview-pdf-btn').textContent = previewVisible ? '✕ Close Preview' : '🔍 Preview';
+  if (previewVisible) renderPrintPreview();
+}
+
+function renderPrintPreview() {
+  const wrap = document.getElementById('print-preview-wrap');
+  if (!wrap || wrap.style.display === 'none') return;
+  const cols = parseInt(document.getElementById('exp-cols').value);
+  const rows = parseInt(document.getElementById('exp-rows').value);
+  const gap  = parseInt(document.getElementById('exp-gap').value);
+  const scalePct = parseInt(document.getElementById('exp-scale').value) / 100;
+  const pageSz = document.getElementById('exp-page-size').value;
+  // Page ratio
+  const ratio = pageSz === 'a4' ? 297/210 : 11/8.5;
+  const previewW = Math.min(wrap.clientWidth - 20, 500);
+  const previewH = Math.round(previewW * ratio);
+  const canvas = document.getElementById('print-preview-canvas');
+  canvas.width = previewW;
+  canvas.height = previewH;
+  const ctx = canvas.getContext('2d');
+  // Background
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, previewW, previewH);
+  // Scale factors from mm to canvas pixels
+  const mmW = pageSz === 'a4' ? 210 : 215.9;
+  const mmH = pageSz === 'a4' ? 297 : 279.4;
+  const px = previewW / mmW; // pixels per mm
+  // Compute card size (same logic as generateBinderPDF)
+  const margin = 10;
+  const gapMm = gap;
+  const availW = mmW - 2*margin;
+  const availH = mmH - 2*margin;
+  const baseCardW = (availW - (cols-1)*gapMm) / cols;
+  const baseCardH = (availH - (rows-1)*gapMm) / rows;
+  const cardW = baseCardW * scalePct;
+  const cardH = baseCardH * scalePct;
+  const gridW = cols*cardW + (cols-1)*gapMm;
+  const gridH = rows*cardH + (rows-1)*gapMm;
+  const startX = (mmW - gridW) / 2;
+  const startY = (mmH - gridH) / 2;
+  // Draw slots
+  const exportItems = exportState ? exportState.items : [];
+  let idx = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let cl = 0; cl < cols; cl++) {
+      const x = (startX + cl*(cardW+gapMm)) * px;
+      const y = (startY + r*(cardH+gapMm)) * px;
+      const w = cardW * px;
+      const h = cardH * px;
+      ctx.fillStyle = '#F2F9FD';
+      ctx.strokeStyle = '#BDD9E6';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 4);
+      ctx.fill();
+      ctx.stroke();
+      if (idx < exportItems.length) {
+        const item = exportItems[idx];
+        ctx.fillStyle = '#5A8C9A';
+        ctx.font = `bold ${Math.max(6, w*0.12)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText((item.pokemonName || item.cardName || '?').substring(0, 12), x + w/2, y + h*0.55);
+        if (item.artworkUrl || item.imageSmall) {
+          const imgEl = new Image();
+          imgEl.crossOrigin = 'anonymous';
+          imgEl.onload = () => {
+            const scale = Math.min(w*0.7/imgEl.width, h*0.6/imgEl.height);
+            const dw = imgEl.width*scale, dh = imgEl.height*scale;
+            ctx.drawImage(imgEl, x+(w-dw)/2, y+h*0.05, dw, dh);
+          };
+          imgEl.src = item.artworkUrl || item.imageSmall;
+        }
+        idx++;
+      }
+    }
+  }
 }
 
 function closeExportModal() { document.getElementById('export-modal').classList.remove('open'); }
