@@ -733,21 +733,10 @@ let currentUser = null;
 
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
-    if (isMobile) return auth.signInWithRedirect(provider);
     return auth.signInWithPopup(provider);
   }).catch(e => toast('Sign-in failed: ' + e.message, 'err'));
 }
-
-// Handle redirect result on page load (iOS redirect flow)
-auth.getRedirectResult().then(result => {
-  // onAuthStateChanged will fire automatically if result has a user
-}).catch(e => {
-  if (e.code && e.code !== 'auth/no-auth-event') {
-    setTimeout(() => toast('Sign-in error: ' + (e.message || e.code), 'err'), 1000);
-  }
-});
 
 function signOut() {
   auth.signOut();
