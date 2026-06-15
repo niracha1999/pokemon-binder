@@ -741,7 +741,13 @@ function signInWithGoogle() {
 }
 
 // Handle redirect result on page load (iOS redirect flow)
-auth.getRedirectResult().catch(() => {});
+auth.getRedirectResult().then(result => {
+  // onAuthStateChanged will fire automatically if result has a user
+}).catch(e => {
+  if (e.code && e.code !== 'auth/no-auth-event') {
+    setTimeout(() => toast('Sign-in error: ' + (e.message || e.code), 'err'), 1000);
+  }
+});
 
 function signOut() {
   auth.signOut();
