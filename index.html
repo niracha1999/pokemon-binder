@@ -733,8 +733,15 @@ let currentUser = null;
 
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(e => toast('Sign-in failed: ' + e.message, 'err'));
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
+    if (isMobile) return auth.signInWithRedirect(provider);
+    return auth.signInWithPopup(provider);
+  }).catch(e => toast('Sign-in failed: ' + e.message, 'err'));
 }
+
+// Handle redirect result on page load (iOS redirect flow)
+auth.getRedirectResult().catch(() => {});
 
 function signOut() {
   auth.signOut();
@@ -2432,6 +2439,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'binder') renderBinderView();
+  closeMobileSidebar();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
