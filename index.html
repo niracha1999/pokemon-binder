@@ -536,6 +536,14 @@
             </div>
           </div>
           <div id="export-form-chips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+          <!-- Generation filter -->
+          <div class="export-filter-row" style="margin-bottom:6px;margin-top:8px">
+            <span class="export-filter-label">Gen</span>
+            <div class="export-filter-actions">
+              <button class="exp-chip-btn" onclick="setAllGenFilter(false)">All</button>
+            </div>
+          </div>
+          <div id="export-gen-chips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
         </div>
 
         <div class="export-results" id="export-results">
@@ -772,6 +780,7 @@ const PAGE = 48;
 
 // ─── Binder view persistent state ────────────────────────────────────────────
 let binderViewState = { groupBy: 'none', sortBy: 'dex', viewMode: 'cards' };
+let binderFilterQuery = '';
 
 // ─── Generation ranges ───────────────────────────────────────────────────────
 const GEN_RANGES = {
@@ -857,6 +866,7 @@ function renameBinder(id, newName) {
 function selectBinder(id) {
   closeMobileSidebar();
   activeBinder = id;
+  binderFilterQuery = '';
   renderSidebar();
   renderBinderView();
   switchTab('binder', document.querySelectorAll('.tab')[1]);
@@ -948,6 +958,12 @@ function renderBinderView() {
         <button title="List view" class="${viewMode==='list'?'active':''}" onclick="setBVS('viewMode','list')">☰</button>
       </div>
       <button class="exp-chip-btn" onclick="resetBVS()" title="Reset to defaults">↺ Reset</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+      <input id="binder-filter-input" type="search" placeholder="🔍 Filter cards in this binder..." value="${binderFilterQuery}"
+        style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:0.82rem;background:var(--surface);color:var(--text);font-family:inherit"
+        oninput="binderFilterQuery=this.value;renderBinderCards(getBinder(activeBinder))" />
+      ${binderFilterQuery ? `<button class="exp-chip-btn" onclick="binderFilterQuery='';document.getElementById('binder-filter-input').value='';renderBinderCards(getBinder(activeBinder))">✕</button>` : ''}
     </div>`;
 
   if (total === 0) {
@@ -1002,7 +1018,9 @@ function renderBinderCards(b) {
   if (!wrap) return;
   const { groupBy, sortBy, viewMode } = binderViewState;
 
-  const sorted = sortCards([...b.cards], sortBy);
+  const q = binderFilterQuery.trim().toLowerCase();
+  const cards = q ? b.cards.filter(c => (c.pokemonName||c.cardName||'').toLowerCase().includes(q) || (c.pokemonNameJP||'').toLowerCase().includes(q) || (c.formLabel||'').toLowerCase().includes(q) || (c.setName||'').toLowerCase().includes(q)) : b.cards;
+  const sorted = sortCards([...cards], sortBy);
   const grouped = groupCards(sorted, groupBy);
   const isList = viewMode === 'list';
 
@@ -1785,6 +1803,7 @@ let exportState = {
   typeFilter: {},     // type -> 'include' | 'exclude' | undefined (=include all)
   formFilter: {},     // formKey -> 'include' | 'exclude' | undefined
   includeBase: true,  // include base (non-form) Pokemon
+  genFilter: new Set(), // empty = all gens; otherwise Set of gen numbers (1-9)
   searchQuery: '',
   searchResults: [],
 };
@@ -1799,12 +1818,14 @@ function openExportModal(binderId) {
   exportState.typeFilter = {};
   exportState.formFilter = {};
   exportState.includeBase = true;
+  exportState.genFilter = new Set();
   exportState.searchQuery = '';
   exportState.searchResults = [];
   document.getElementById('export-modal-title').textContent = `Export "${b.name}" to PDF`;
   document.getElementById('export-modal').classList.add('open');
   renderExportTypeChips();
   renderExportFormChips();
+  renderExportGenChips();
   renderExportList();
   updateExportCount();
   // Auto-search to populate results with gen-filtered list
@@ -1986,6 +2007,27 @@ function setAllFormFilter(mode) {
   runExportSearch();
 }
 
+const GEN_LABELS = { 1:'Gen 1 (Kanto)', 2:'Gen 2 (Johto)', 3:'Gen 3 (Hoenn)', 4:'Gen 4 (Sinnoh)', 5:'Gen 5 (Unova)', 6:'Gen 6 (Kalos)', 7:'Gen 7 (Alola)', 8:'Gen 8 (Galar)', 9:'Gen 9 (Paldea)' };
+function renderExportGenChips() {
+  const el = document.getElementById('export-gen-chips');
+  if (!el) return;
+  el.innerHTML = [1,2,3,4,5,6,7,8,9].map(g => {
+    const active = exportState.genFilter.has(g);
+    return `<span class="exp-chip ${active ? 'active' : ''}" onclick="toggleGenFilter(${g})" title="${GEN_LABELS[g]}">Gen ${g}</span>`;
+  }).join('');
+}
+function toggleGenFilter(g) {
+  if (exportState.genFilter.has(g)) exportState.genFilter.delete(g);
+  else exportState.genFilter.add(g);
+  renderExportGenChips();
+  runExportSearch();
+}
+function setAllGenFilter(none) {
+  exportState.genFilter = new Set();
+  renderExportGenChips();
+  runExportSearch();
+}
+
 // ─── Export search ────────────────────────────────────────────────────────────
 function debounceExportSearch() {
   clearTimeout(exportSearchTimeout);
@@ -2011,6 +2053,18 @@ async function runExportSearch() {
   // Filter by search query
   let filtered = pool;
   if (q) filtered = pool.filter(p => p.name && p.name.includes(q));
+
+  // Apply generation filter
+  if (exportState.genFilter.size > 0) {
+    filtered = filtered.filter(p => {
+      const id = p.id || p.pokedexId || 0;
+      for (const g of exportState.genFilter) {
+        const [min, max] = GEN_RANGES[g];
+        if (id >= min && id <= max) return true;
+      }
+      return false;
+    });
+  }
 
   // Apply form filter
   const hasFormIncludes = ALL_FORMS_EXPORT.some(f => exportState.formFilter[f] === 'include');
@@ -2117,6 +2171,18 @@ async function addAllMatchingToExport() {
     if (hasFormIncludes && state !== 'include') return false;
     return true;
   });
+
+  // Apply generation filter
+  if (exportState.genFilter.size > 0) {
+    filtered = filtered.filter(p => {
+      const id = p.id || p.pokedexId || 0;
+      for (const g of exportState.genFilter) {
+        const [min, max] = GEN_RANGES[g];
+        if (id >= min && id <= max) return true;
+      }
+      return false;
+    });
+  }
 
   // Apply search query if any
   if (exportState.searchQuery) filtered = filtered.filter(p => p.name.includes(exportState.searchQuery));
